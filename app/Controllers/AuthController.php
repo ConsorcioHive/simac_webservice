@@ -14,6 +14,8 @@ class AuthController
             header('Location: ' . BASE_URL . 'index.php');
             exit;
         }
+        $empresaModel = new Empresa();
+        $empresa = $empresaModel->obtenerUnica();
         $error = $_GET['error'] ?? null;
         require APP_PATH . '/views/login.php';
     }

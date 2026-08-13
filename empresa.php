@@ -18,6 +18,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'telefono'            => $_POST['telefono'],
         'email'               => $_POST['email'],
         'logo_url'            => $_POST['logo_url'],
+        'caratula_url'        => $_POST['caratula_url'],
         'empresa_descripcion' => $_POST['empresa_descripcion'],
     ]);
     $msg = $res['ok'] ? 'Empresa actualizada.' : ('Error: ' . $res['msg']);
@@ -43,6 +44,7 @@ if (!empty($_GET['m'])) echo '<p class="card" style="color:#14532d">' . htmlspec
         <input type="text" name="telefono" placeholder="Teléfono" value="<?= htmlspecialchars($empresa['telefono'] ?? '') ?>">
         <input type="email" name="email" placeholder="Email" value="<?= htmlspecialchars($empresa['email'] ?? '') ?>">
         <input type="text" name="logo_url" placeholder="URL del logo" value="<?= htmlspecialchars($empresa['logo_url'] ?? '') ?>">
+        <input type="text" name="caratula_url" placeholder="URL de la carátula (fondo de login)" value="<?= htmlspecialchars($empresa['caratula_url'] ?? '') ?>">
         <textarea name="empresa_descripcion" placeholder="Descripción"><?= htmlspecialchars($empresa['empresa_descripcion'] ?? '') ?></textarea>
         <button type="submit">Guardar cambios</button>
     </form>

@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS empresas (
     telefono           VARCHAR(50)  DEFAULT NULL,
     email              VARCHAR(150) DEFAULT NULL,
     logo_url           VARCHAR(255) DEFAULT NULL,
+    caratula_url       VARCHAR(255) DEFAULT NULL,
     empresa_descripcion TEXT,
     moneda_codigo      CHAR(3)      DEFAULT NULL,
     moneda_simbolo     VARCHAR(10)  DEFAULT NULL,

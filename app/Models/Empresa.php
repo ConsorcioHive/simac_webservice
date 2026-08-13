@@ -31,6 +31,7 @@ class Empresa
                 telefono         = :telefono,
                 email            = :email,
                 logo_url         = :logo_url,
+                caratula_url      = :caratula_url,
                 empresa_descripcion = :empresa_descripcion
              WHERE id = :id"
         );
@@ -42,6 +43,7 @@ class Empresa
             'telefono'            => $datos['telefono'] ?? null,
             'email'               => $datos['email'] ?? null,
             'logo_url'            => $datos['logo_url'] ?? null,
+            'caratula_url'        => $datos['caratula_url'] ?? null,
             'empresa_descripcion' => $datos['empresa_descripcion'] ?? null,
             'id'                  => $id,
         ]);
