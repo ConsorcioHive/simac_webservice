@@ -1,81 +1,99 @@
 <?php
-// index.php — Dashboard básico (punto de partida para ampliar módulos)
+// index.php — Router principal (estilo SIMAC: todas las rutas vía ?page=)
 require __DIR__ . '/config/config.php';
 
+use App\Controllers\AuthController;
+use App\Controllers\DashboardController;
+use App\Controllers\EmpresaController;
+use App\Controllers\UsuarioController;
+use App\Controllers\SyncController;
 use App\Helpers\Session;
-use App\Models\SyncLog;
-use App\Models\Usuario;
-use App\Models\Empresa;
 
-Session::requireLogin();
+try {
 
-$empresaNombre = Session::get('empresa_nombre');
-$usuarioNombre = Session::get('usuario_nombre');
-$empresaCodigo = Session::get('empresa_codigo');
+// Determinar página solicitada (GET y fallback a POST para llamadas AJAX)
+$page = $_GET['page'] ?? $_POST['page'] ?? 'dashboard';
 
-$syncModel  = new SyncLog();
-$usuarioModel = new Usuario();
-$empresaModel = new Empresa();
-
-$logs      = $syncModel->ultimos(5);
-$totalUsuarios = count($usuarioModel->listarPorEmpresa(Session::get('empresa_id') ?? 0));
-$empresa   = $empresaModel->obtenerUnica();
-
-$modulos = [
-    ['icon' => '👤', 'titulo' => 'Usuarios',        'desc' => 'Gestión de usuarios de la clínica', 'url' => 'usuarios.php'],
-    ['icon' => '🏥', 'titulo' => 'Empresa',         'desc' => 'Datos de la clínica instalada',      'url' => 'empresa.php'],
-    ['icon' => '🔄', 'titulo' => 'Sincronización',  'desc' => 'Subir/bajar datos con SIMAC nube',   'url' => 'sync.php'],
+// ====== MIDDLEWARE SIMPLE DE AUTENTICACIÓN ======
+$publicPages = [
+    'login',
+    'login_process',
 ];
 
-$page_title = APP_NAME . ' - Panel';
-require APP_PATH . '/views/layout/header.php';
-?>
+if (!in_array($page, $publicPages, true) && !Session::isLoggedIn()) {
+    $_SESSION['flash_info'] = 'Tu sesión ha expirado. Por favor, inicia sesión nuevamente.';
+    header('Location: index.php?page=login');
+    exit;
+}
 
-<h1>Bienvenido, <?= htmlspecialchars($usuarioNombre) ?></h1>
-<p>Empresa: <strong><?= htmlspecialchars($empresaNombre) ?></strong>
-   (código: <?= htmlspecialchars($empresaCodigo ?? '—') ?>)</p>
+switch ($page) {
 
-<div style="display:flex; gap:16px; flex-wrap:wrap;">
-    <?php foreach ($modulos as $m): ?>
-        <a href="<?= BASE_URL . $m['url'] ?>" style="text-decoration:none; color:inherit; flex:1; min-width:220px;">
-            <div class="card" style="height:100%;">
-                <div style="font-size:32px;"><?= $m['icon'] ?></div>
-                <h3 style="margin:8px 0 4px;"><?= $m['titulo'] ?></h3>
-                <p style="color:#555; margin:0;"><?= $m['desc'] ?></p>
-            </div>
-        </a>
-    <?php endforeach; ?>
-</div>
+    case 'login':
+        $controller = new AuthController();
+        $controller->showLogin();
+        break;
 
-<div class="card">
-    <h3>Resumen</h3>
-    <ul>
-        <li>Usuarios registrados: <strong><?= $totalUsuarios ?></strong></li>
-        <li>Clínica instalada: <strong><?= htmlspecialchars($empresa['nombre'] ?? '—') ?></strong></li>
-        <li>Modo de sincronización: <strong><?= SIMAC_API_STUB ? 'Stub (simulado)' : 'Nube real' ?></strong></li>
-    </ul>
-</div>
+    case 'login_process':
+        $controller = new AuthController();
+        $controller->loginProcess();
+        break;
 
-<div class="card">
-    <h3>Últimas sincronizaciones</h3>
-    <?php if (empty($logs)): ?>
-        <p>Aún no hay registros de sincronización.</p>
-    <?php else: ?>
-        <table>
-            <thead><tr><th>Fecha</th><th>Tipo</th><th>Dirección</th><th>Estado</th></tr></thead>
-            <tbody>
-            <?php foreach ($logs as $l): ?>
-                <tr>
-                    <td><?= htmlspecialchars($l['creado_en']) ?></td>
-                    <td><?= htmlspecialchars($l['tipo']) ?></td>
-                    <td><?= htmlspecialchars($l['direccion']) ?></td>
-                    <td><?= htmlspecialchars($l['estado']) ?></td>
-                </tr>
-            <?php endforeach; ?>
-            </tbody>
-        </table>
-    <?php endif; ?>
-</div>
+    case 'logout':
+        $controller = new AuthController();
+        $controller->logout();
+        break;
 
-<?php
-require APP_PATH . '/views/layout/footer.php';
+    case 'dashboard':
+        $controller = new DashboardController();
+        $controller->index();
+        break;
+
+    case 'empresas_form':
+        $controller = new EmpresaController();
+        $controller->form();
+        break;
+
+    case 'empresas_guardar':
+        $controller = new EmpresaController();
+        $controller->guardar();
+        break;
+
+    case 'empresas_crear_carpeta_entidad':
+        $controller = new EmpresaController();
+        $controller->crearCarpetaEntidad();
+        break;
+
+    case 'empresas_contenedor':
+        $controller = new EmpresaController();
+        $controller->contenedor();
+        break;
+
+    case 'usuarios':
+        $controller = new UsuarioController();
+        $controller->index();
+        break;
+
+    case 'usuarios_cambiar_foto':
+        $controller = new UsuarioController();
+        $controller->cambiarFoto();
+        break;
+
+    case 'sync':
+        $controller = new SyncController();
+        $controller->index();
+        break;
+
+    case 'sync_log':
+        $controller = new SyncController();
+        $controller->log();
+        break;
+
+    default:
+        http_response_code(404);
+        die('Página no encontrada.');
+}
+
+} catch (Throwable $e) {
+    http_response_code(500);
+    echo '<pre>' . htmlspecialchars($e->getMessage()) . "\n" . htmlspecialchars($e->getTraceAsString()) . '</pre>';
+}

@@ -11,7 +11,7 @@ class AuthController
     public function showLogin()
     {
         if (Session::isLoggedIn()) {
-            header('Location: ' . BASE_URL . 'index.php');
+            header('Location: ' . BASE_URL . 'index.php?page=dashboard');
             exit;
         }
         $empresaModel = new Empresa();
@@ -23,7 +23,7 @@ class AuthController
     public function loginProcess()
     {
         if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-            header('Location: ' . BASE_URL . 'login.php');
+            header('Location: ' . BASE_URL . 'index.php?page=login');
             exit;
         }
 
@@ -31,7 +31,7 @@ class AuthController
         $password      = $_POST['password'] ?? '';
 
         if ($identificador === '' || $password === '') {
-            header('Location: ' . BASE_URL . 'login.php?error=1');
+            header('Location: ' . BASE_URL . 'index.php?page=login&error=1');
             exit;
         }
 
@@ -40,7 +40,7 @@ class AuthController
 
         if (!$usuario || !password_verify($password, $usuario['password_hash'])
             || $usuario['estado'] !== 'activo') {
-            header('Location: ' . BASE_URL . 'login.php?error=1');
+            header('Location: ' . BASE_URL . 'index.php?page=login&error=1');
             exit;
         }
 
@@ -49,14 +49,14 @@ class AuthController
 
         Session::login($usuario, $empresa ?: ['id' => $usuario['empresa_id']]);
 
-        header('Location: ' . BASE_URL . 'index.php');
+        header('Location: ' . BASE_URL . 'index.php?page=dashboard');
         exit;
     }
 
     public function logout()
     {
         Session::logout();
-        header('Location: ' . BASE_URL . 'login.php');
+        header('Location: ' . BASE_URL . 'index.php?page=login');
         exit;
     }
 }

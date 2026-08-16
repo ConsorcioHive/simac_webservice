@@ -26,10 +26,10 @@
     <strong><?= APP_NAME ?></strong>
     <nav>
         <a href="<?= BASE_URL ?>index.php">Inicio</a>
-        <a href="<?= BASE_URL ?>usuarios.php">Usuarios</a>
-        <a href="<?= BASE_URL ?>empresa.php">Empresa</a>
-        <a href="<?= BASE_URL ?>sync.php">Sincronización</a>
-        <a href="<?= BASE_URL ?>logout.php">Salir</a>
+        <a href="<?= BASE_URL ?>index.php?page=usuarios">Usuarios</a>
+        <a href="<?= BASE_URL ?>index.php?page=empresas_form">Empresa</a>
+        <a href="<?= BASE_URL ?>index.php?page=sync">Sincronización</a>
+        <a href="<?= BASE_URL ?>index.php?page=logout">Salir</a>
     </nav>
 </header>
 <main>

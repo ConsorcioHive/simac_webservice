@@ -83,6 +83,10 @@ class Usuario
             $campos .= ", password_hash = :password_hash";
             $params['password_hash'] = password_hash($datos['password'], PASSWORD_BCRYPT);
         }
+        if (isset($datos['foto'])) {
+            $campos .= ", foto = :foto";
+            $params['foto'] = $datos['foto'];
+        }
         $stmt = $this->pdo->prepare("UPDATE usuarios SET $campos WHERE id = :id");
         return $stmt->execute($params);
     }
@@ -93,5 +97,11 @@ class Usuario
             "DELETE FROM usuarios WHERE id = :id AND empresa_id = :e"
         );
         return $stmt->execute(['id' => $id, 'e' => $empresaId]);
+    }
+
+    public function actualizarFoto($id, $fotoUrl)
+    {
+        $stmt = $this->pdo->prepare("UPDATE usuarios SET foto = :foto WHERE id = :id");
+        return $stmt->execute(['foto' => $fotoUrl, 'id' => $id]);
     }
 }

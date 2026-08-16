@@ -32,7 +32,7 @@ class Session
     public static function requireLogin()
     {
         if (!self::isLoggedIn()) {
-            header('Location: ' . BASE_URL . 'login.php');
+            header('Location: ' . BASE_URL . 'index.php?page=login');
             exit;
         }
     }

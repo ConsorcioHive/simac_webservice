@@ -1,0 +1,276 @@
+/* Único fix: que nunca queden totalmente ocultos */
+.header-logo-wrapper,
+.logo-wrapper,
+.sidebar-wrapper,
+.sidebar-wrapper.close_icon {
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+.product-table .btn-xs,
+.product-table .btn-xs a {
+  font-size: 11px;
+  line-height: 1.2;
+  padding: 3px 8px;
+}
+
+.product-table .btn-group .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.product-table .btn-group.btn-group-sm .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem; /* mismo tamaño para ambos */
+  line-height: 1.2;
+  padding: 0.25rem 0.5rem;
+}
+
+/* Logo de empresa en header y sidebar */
+.logo-wrapper img {
+  max-width: 64px;
+  height: auto;
+}
+
+.login-left-wrapper {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: center;
+    padding: 10px;
+    width: 100%;
+}
+
+/* Contenedor limpio, solo controla tamaño y clipping */
+.login-cover-container {
+    width: 100%;
+    height: 260px;
+    margin-top: 44px;
+    border-radius: 12px;
+    overflow: hidden;              /* recorta lo que sobresalga */
+    display: block;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+}
+
+/* Imagen: SIEMPRE 100% del ancho del contenedor */
+.login-cover-img {
+    width: 100%;                   /* ocupa todo el ancho */
+    height: 100%;                  /* se adapta al alto del contenedor */
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: cover;             /* llena sin dejar huecos (puede recortar un poco) */
+    display: block;
+    border-radius: 12px;
+    border: 3px solid #e0e6ed;     /* único borde visible */
+}
+
+/* Logo debajo */
+.login-left-logo-img {
+    margin-top: 12px;
+    margin-bottom: 12px;
+    max-width: 140px;
+    width: 100%;
+    height: auto;
+    display: block;
+}
+
+/* Responsive: ocultar carátula, logo más grande */
+@media (max-width: 992px) {
+    .login-cover-container {
+        display: none !important;
+    }
+
+    .login-left-logo-img {
+        max-width: 180px;
+        margin-top: 20px;
+    }
+
+    .login-left-wrapper {
+        padding: 20px 10px;
+        justify-content: center;
+    }
+}
+/* Fix para contadores del topbar (que no se vean cortados) */
+.nav-right .notification-box {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.nav-right .notification-box .badge {
+    position: absolute !important;
+    top: -5px !important;
+    right: -10px !important;
+    padding: 2px 5px !important;
+    font-size: 10px !important;
+    min-width: 18px;
+    height: 18px;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    border: 2px solid #fff;
+    border-radius: 50% !important;
+    z-index: 1;
+    line-height: 1;
+    transform: none !important; /* Evitar que translate-middle de Bootstrap interfiera si quedó alguna clase */
+}
+
+/* Asegurar que los items del menú no corten lo que sobresale */
+.nav-right .nav-menus li {
+    overflow: visible !important;
+}
+
+/* FUERZA UNA SOLA FILA EN EL HEADER */
+.page-header {
+    height: 80px !important;
+    padding: 0 !important;
+}
+
+.page-header .header-wrapper {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    justify-content: flex-start !important;
+    height: 100% !important;
+    padding: 0 20px !important;
+}
+
+.left-header {
+    display: flex !important;
+    align-items: center !important;
+    flex-grow: 1 !important; /* El centro crece si hay espacio */
+}
+
+.nav-right {
+    display: flex !important;
+    align-items: center !important;
+    flex-shrink: 0 !important; /* La derecha no se achica */
+}
+
+/* ==========================================================================
+   TOGGLE CONDICIONAL EN TOPBAR
+   ========================================================================== */
+
+/* Botón de 4 cuadros oculto por defecto */
+.toggle-sidebar-topbar {
+    display: none !important;
+}
+
+/* Ocultar formulario de búsqueda que puede empujar el layout */
+.page-header .header-wrapper .search-full {
+    display: none !important;
+}
+
+/* En Desktop, el header-logo-wrapper suele estar oculto por el tema */
+@media (min-width: 992px) {
+    .page-header .header-logo-wrapper {
+        display: none !important;
+    }
+}
+
+/* CUANDO EL SIDEBAR ESTÁ COMPRIMIDO (.close_icon) */
+/* Mostramos el contenedor en el topbar */
+.page-header.close_icon .header-logo-wrapper {
+    display: flex !important;
+    width: 80px !important;
+    height: 100% !important;
+    min-height: 80px !important;
+    justify-content: center !important;
+    align-items: center !important;
+    background-color: #fff;
+    border-right: 1px solid #f2f2f2;
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+/* Mostramos el botón de 4 cuadros */
+.page-header.close_icon .toggle-sidebar-topbar {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    cursor: pointer;
+    height: 80px !important;
+    width: 100% !important;
+}
+
+.page-header.close_icon .toggle-sidebar-topbar i {
+    font-size: 20px;
+    line-height: 1;
+    margin: 0 !important;
+}
+
+/* Ocultamos el logo pequeño del topbar para que no se solape */
+.page-header.close_icon .header-logo-wrapper .logo-wrapper {
+    display: none !important;
+}
+
+/* Ajuste de padding del header para que no se mueva el contenido */
+.page-header.close_icon {
+    padding-left: 0 !important;
+}
+
+/* Estilo del icono */
+.toggle-sidebar-topbar i {
+    width: 24px;
+    height: 24px;
+    color: #313131;
+    vertical-align: middle;
+}
+
+/* ==========================================================================
+   VISIBILIDAD PROTAGÓNICA DE FORMULARIOS
+   ========================================================================== */
+.form-control, 
+.form-select, 
+.form-control-sm, 
+.form-select-sm, 
+textarea {
+    background-color: #f6f7fb !important; /* Gris claro profesional */
+    border: 1px solid #dce1e6 !important;
+    border-radius: 6px !important;
+    transition: all 0.2s ease-in-out !important;
+    font-weight: 500 !important;
+    color: #2b2b2b !important;
+}
+
+/* Efecto al apuntar (Hover) */
+.form-control:hover, 
+.form-select:hover, 
+textarea:hover {
+    border-color: var(--theme-deafult, #1e3a5f) !important;
+    background-color: #f0f2f9 !important;
+    cursor: pointer;
+}
+
+/* Efecto al entrar al campo (Focus) */
+.form-control:focus, 
+.form-select:focus, 
+textarea:focus {
+    background-color: #ffffff !important;
+    border-color: var(--theme-deafult, #1e3a5f) !important;
+    box-shadow: 0 0 0 4px rgba(30, 58, 95, 0.1) !important;
+    outline: 0 !important;
+}
+
+/* Campos de solo lectura (Readonly) */
+.form-control[readonly], 
+.form-control:disabled {
+    background-color: #e9ecef !important;
+    border-color: #dee2e6 !important;
+    cursor: not-allowed;
+    opacity: 0.8;
+}
+
+/* Etiquetas de formularios para acompañar el estilo */
+label.form-label {
+    font-weight: 600 !important;
+    color: #1e3a5f !important;
+    margin-bottom: 0.4rem !important;
+    font-size: 13px !important;
+}

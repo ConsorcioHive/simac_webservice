@@ -2,10 +2,23 @@
 // config/config.php
 // Bootstrap del sistema local simac_webservice.
 // Define constantes, carga la capa de datos y el autoloader de App\.
+if (defined('BASE_PATH')) {
+    return; // ya inicializado
+}
 
 define('BASE_PATH', dirname(__DIR__));
 define('APP_PATH', BASE_PATH . '/app');
-define('BASE_URL', '/simac_webservice/');
+
+// URL base local: se resuelve desde la ruta real del script para que funcione
+// siempre en local (subcarpeta o raíz) sin depender de un valor fijo.
+$scriptDir = isset($_SERVER['SCRIPT_NAME'])
+    ? rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'])), '/')
+    : '';
+if ($scriptDir === '' || $scriptDir === '/' || $scriptDir === '.') {
+    $scriptDir = '';
+}
+define('BASE_URL', $scriptDir . '/');
+
 define('APP_NAME', 'SIMAC Webservice');
 
 // ── Destino en la nube (SIMAC) ──────────────────────────────────────────────
