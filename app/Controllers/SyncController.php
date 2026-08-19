@@ -296,6 +296,9 @@ class SyncController
                 $msg = $res['ok']
                     ? 'OK: ' . ($res['message'] ?? 'JSON colocados y subidos.')
                     : 'Error: ' . ($res['message'] ?? 'desconocido');
+            } elseif ($_POST['_action'] === 'vaciar_log') {
+                $this->pdo->exec("DELETE FROM sync_log");
+                $msg = 'Historial de sincronización local vaciado.';
             } elseif ($_POST['_action'] === 'mover_outbox') {
                 $this->moverAOutbox($_POST['archivo'] ?? '');
                 $msg = 'Archivo movido a outbox.';

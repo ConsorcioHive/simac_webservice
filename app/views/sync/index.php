@@ -21,15 +21,6 @@ function mostrarArchivosSync($lista) {
         <?php endif; ?>
         <div class="d-grid gap-2">
           <form method="post" action="index.php?page=sync">
-            <input type="hidden" name="_action" value="subir">
-            <button type="submit" class="btn btn-primary w-100"><i class="fa fa-cloud-upload me-2"></i>Subir paquete a la nube</button>
-          </form>
-          <form method="post" action="index.php?page=sync">
-            <input type="hidden" name="_action" value="bajar">
-            <button type="submit" class="btn btn-outline-primary w-100"><i class="fa fa-cloud-download me-2"></i>Bajar paquete de la nube</button>
-          </form>
-          <hr>
-          <form method="post" action="index.php?page=sync">
             <input type="hidden" name="_action" value="subir_archivos">
             <button type="submit" class="btn btn-success w-100"><i class="fa fa-upload me-2"></i>Subir control de parámetros</button>
           </form>
@@ -80,7 +71,13 @@ function mostrarArchivosSync($lista) {
     <div class="card">
       <div class="card-header d-flex align-items-center justify-content-between">
         <h5 class="mb-0">Registro de sincronización</h5>
-        <a href="index.php?page=sync_log" class="btn btn-outline-secondary btn-sm"><i class="fa fa-history me-1"></i>Ver historial completo</a>
+        <div class="d-flex gap-2">
+          <form method="post" action="index.php?page=sync" onsubmit="return confirm('¿Vaciar todo el historial de sincronización local?');">
+            <input type="hidden" name="_action" value="vaciar_log">
+            <button type="submit" class="btn btn-outline-danger btn-sm"><i class="fa fa-trash me-1"></i>Vaciar historial</button>
+          </form>
+          <a href="index.php?page=sync_log" class="btn btn-outline-secondary btn-sm"><i class="fa fa-history me-1"></i>Ver historial completo</a>
+        </div>
       </div>
       <div class="card-body">
         <div class="table-responsive">
