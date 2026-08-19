@@ -37,7 +37,7 @@ function mostrarArchivosSync($lista) {
         <h5 class="mb-0">Colocar JSON de control de parámetros</h5>
       </div>
       <div class="card-body">
-        <p class="small text-muted mb-2">Selecciona los dos archivos generados por el sistema externo. Se guardan en la carpeta configurada de la clínica y se suben a la nube automáticamente.</p>
+        <p class="small text-muted mb-2">Selecciona los archivos generados por el sistema externo. Se guardan en la carpeta configurada de la clínica y se suben a la nube automáticamente. <code>clientes.json</code> es opcional.</p>
         <form method="post" action="index.php?page=sync" enctype="multipart/form-data">
           <input type="hidden" name="_action" value="colocar_json">
           <div class="mb-2">
@@ -47,6 +47,10 @@ function mostrarArchivosSync($lista) {
           <div class="mb-2">
             <label class="form-label small mb-1">servicios.json</label>
             <input type="file" class="form-control form-control-sm" name="servicios_json" accept=".json,application/json" required>
+          </div>
+          <div class="mb-2">
+            <label class="form-label small mb-1">clientes.json <span class="text-muted">(opcional)</span></label>
+            <input type="file" class="form-control form-control-sm" name="clientes_json" accept=".json,application/json">
           </div>
           <button type="submit" class="btn btn-success w-100"><i class="fa fa-upload me-2"></i>Colocar y sincronizar</button>
         </form>

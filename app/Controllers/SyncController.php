@@ -62,8 +62,8 @@ class SyncController
         return $res;
     }
 
-    // Sube los archivos de control de parámetros (prespuestos/servicios) de la
-    // clínica a SIMAC cloud junto con su manifiesto.
+    // Sube los archivos de control de parámetros (prespuestos/servicios y,
+    // si existe, clientes) de la clínica a SIMAC cloud junto con su manifiesto.
     // Si $soloSiCambio=true, solo envía si el hash de los archivos difiere del
     // último hash subido con éxito (detecta archivos nuevos del sistema externo).
     public function subirArchivos($soloSiCambio = false)
@@ -78,14 +78,19 @@ class SyncController
 
         $prespuestos = $carpeta . 'prespuestos.json';
         $servicios   = $carpeta . 'servicios.json';
+        $clientes    = $carpeta . 'clientes.json';
         if (!is_file($prespuestos) || !is_file($servicios)) {
             return ['ok' => false, 'message' => 'No existen prespuestos.json y servicios.json en ' . $carpeta];
         }
 
+        // clientes es opcional: solo se envía cuando la clínica lo tiene
+        $tieneClientes = is_file($clientes);
+
         // Hash combinado de los archivos actuales
         $hashActual = hash('sha256',
             (string)file_get_contents($prespuestos) .
-            (string)file_get_contents($servicios)
+            (string)file_get_contents($servicios) .
+            ($tieneClientes ? (string)file_get_contents($clientes) : '')
         );
 
         if ($soloSiCambio) {
@@ -96,6 +101,15 @@ class SyncController
         }
 
         $archivos = ['prespuestos.json', 'servicios.json'];
+        $multipart = [
+            'prespuestos' => $prespuestos,
+            'servicios'   => $servicios,
+        ];
+        if ($tieneClientes) {
+            $archivos[] = 'clientes.json';
+            $multipart['clientes'] = $clientes;
+        }
+
         $manifiesto = [
             'token'         => $this->client->token(),
             'codigo_clinica'=> $companyCode,
@@ -106,10 +120,7 @@ class SyncController
             'archivos'      => $archivos,
         ];
 
-        $res = $this->client->postMultipart('/index.php?page=control_parametros_sync_recibir', [
-            'prespuestos' => $prespuestos,
-            'servicios'   => $servicios,
-        ], $manifiesto);
+        $res = $this->client->postMultipart('/index.php?page=control_parametros_sync_recibir', $multipart, $manifiesto);
 
         $this->syncLog->registrar(
             'control_parametros',
@@ -127,11 +138,11 @@ class SyncController
         return $res;
     }
 
-    // Coloca manualmente los dos JSON de control de parámetros en la carpeta
-    // local de la clínica (validando nombre y que sean JSON válidos) y luego
-    // dispara la subida a la nube. Útil para pruebas: el sistema externo
-    // reemplazará esta colocación manual depositando los archivos en la misma
-    // carpeta.
+    // Coloca manualmente los JSON de control de parámetros en la carpeta local
+    // de la clínica (validando nombre y que sean JSON válidos) y luego dispara
+    // la subida a la nube. prespuestos y servicios son obligatorios; clientes
+    // es opcional. Útil para pruebas: el sistema externo reemplazará esta
+    // colocación manual depositando los archivos en la misma carpeta.
     public function colocarJson(): array
     {
         $empresa = $this->empresa->obtenerUnica();
@@ -145,6 +156,7 @@ class SyncController
             'servicios_json'   => 'servicios.json',
         ];
 
+        $colocados = 0;
         foreach ($destinos as $campo => $nombreFinal) {
             if (empty($_FILES[$campo]['name']) || ($_FILES[$campo]['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
                 return ['ok' => false, 'message' => "Falta el archivo $nombreFinal."];
@@ -154,9 +166,20 @@ class SyncController
                 return ['ok' => false, 'message' => "$nombreFinal no es un JSON válido."];
             }
             file_put_contents($carpeta . $nombreFinal, $contenido);
+            $colocados++;
         }
 
-        $this->syncLog->registrar('control_parametros', 'colocacion', 'ok', 2, 'JSON colocados en ' . $carpeta);
+        // clientes.json es opcional
+        if (!empty($_FILES['clientes_json']['name']) && ($_FILES['clientes_json']['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK) {
+            $contenido = (string)@file_get_contents($_FILES['clientes_json']['tmp_name']);
+            if (!is_array(json_decode($contenido, true))) {
+                return ['ok' => false, 'message' => 'clientes.json no es un JSON válido.'];
+            }
+            file_put_contents($carpeta . 'clientes.json', $contenido);
+            $colocados++;
+        }
+
+        $this->syncLog->registrar('control_parametros', 'colocacion', 'ok', $colocados, 'JSON colocados en ' . $carpeta);
 
         // Subir a la nube de inmediato
         $res = $this->subirArchivos();
