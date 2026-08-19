@@ -127,6 +127,45 @@ class SyncController
         return $res;
     }
 
+    // Coloca manualmente los dos JSON de control de parámetros en la carpeta
+    // local de la clínica (validando nombre y que sean JSON válidos) y luego
+    // dispara la subida a la nube. Útil para pruebas: el sistema externo
+    // reemplazará esta colocación manual depositando los archivos en la misma
+    // carpeta.
+    public function colocarJson(): array
+    {
+        $empresa = $this->empresa->obtenerUnica();
+        $carpeta = $this->carpetaControlParametros($empresa);
+        if (!is_dir($carpeta)) {
+            @mkdir($carpeta, 0755, true);
+        }
+
+        $destinos = [
+            'prespuestos_json' => 'prespuestos.json',
+            'servicios_json'   => 'servicios.json',
+        ];
+
+        foreach ($destinos as $campo => $nombreFinal) {
+            if (empty($_FILES[$campo]['name']) || ($_FILES[$campo]['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+                return ['ok' => false, 'message' => "Falta el archivo $nombreFinal."];
+            }
+            $contenido = (string)@file_get_contents($_FILES[$campo]['tmp_name']);
+            if (!is_array(json_decode($contenido, true))) {
+                return ['ok' => false, 'message' => "$nombreFinal no es un JSON válido."];
+            }
+            file_put_contents($carpeta . $nombreFinal, $contenido);
+        }
+
+        $this->syncLog->registrar('control_parametros', 'colocacion', 'ok', 2, 'JSON colocados en ' . $carpeta);
+
+        // Subir a la nube de inmediato
+        $res = $this->subirArchivos();
+        if (empty($res['ok'])) {
+            return ['ok' => false, 'message' => 'JSON colocados pero falló la subida: ' . ($res['message'] ?? 'desconocido')];
+        }
+        return ['ok' => true, 'message' => 'JSON colocados y subidos a la nube: ' . ($res['message'] ?? 'OK')];
+    }
+
     // Último hash subido con éxito (último registro control_parametros_hash).
     private function ultimoHashSubido()
     {
@@ -140,19 +179,37 @@ class SyncController
         return $row ? $row['mensaje'] : null;
     }
 
-    // Lee la respuesta que dejó la nube (respuesta_<token>.json) tras procesar
-    // el último envío de control de parámetros.
+    // Lee la respuesta que dejó la nube tras procesar el último envío de
+    // control de parámetros. En modo stub lee el archivo local; en modo real
+    // consulta el endpoint de la nube (autenticado por token), que devuelve el
+    // respuesta_<token>.json más reciente.
     public function leerRespuesta()
     {
         $empresa = $this->empresa->obtenerUnica();
         $carpeta = $this->carpetaControlParametros($empresa);
 
-        $archivo = $carpeta . 'respuesta_' . $this->client->token() . '.json';
-        if (!is_file($archivo)) {
-            return ['ok' => false, 'message' => 'No hay respuesta pendiente de la nube.'];
+        if ($this->client->stub()) {
+            $archivo = $carpeta . 'respuesta_' . $this->client->token() . '.json';
+            if (!is_file($archivo)) {
+                return ['ok' => false, 'message' => 'No hay respuesta pendiente de la nube.'];
+            }
+            $decoded = json_decode((string)file_get_contents($archivo), true);
+            return ['ok' => true, 'data' => $decoded, 'archivo' => basename($archivo)];
         }
-        $decoded = json_decode((string)file_get_contents($archivo), true);
-        return ['ok' => true, 'data' => $decoded, 'archivo' => basename($archivo)];
+
+        $res = $this->client->get('/index.php?page=control_parametros_sync_respuesta');
+        if (empty($res['ok'])) {
+            return ['ok' => false, 'message' => 'No se pudo consultar la nube: ' . ($res['error'] ?? 'desconocido')];
+        }
+        $data = $res['data'] ?? [];
+        if (empty($data['ok']) || empty($data['encontrado'])) {
+            return ['ok' => false, 'message' => $data['mensaje'] ?? 'No hay respuesta pendiente de la nube.'];
+        }
+        return [
+            'ok'      => true,
+            'data'    => $data['data'] ?? [],
+            'archivo' => $data['archivo'] ?? null,
+        ];
     }
 
     // Resuelve la carpeta local de control de parámetros: usa la ruta
@@ -164,7 +221,7 @@ class SyncController
         if ($rutaConfig !== '') {
             $rutaConfig = str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $rutaConfig);
             // Absoluta (con letra de unidad o separador inicial) o relativa a la raíz del webservice
-            if (preg_match('/^[A-Za-z]:\\\\/', $rutaConfig) || preg_match('/^' . preg_quote(DIRECTORY_SEPARATOR, '/') . '/', $rutaConfig)) {
+            if (preg_match('#^[A-Za-z]:[\\\\/]#', $rutaConfig) || preg_match('#^[\\\\/]#', $rutaConfig)) {
                 return rtrim($rutaConfig, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
             }
             return rtrim(BASE_PATH, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR
@@ -234,6 +291,11 @@ class SyncController
                 } else {
                     $msg = 'Error: ' . ($res['message'] ?? 'desconocido');
                 }
+            } elseif ($_POST['_action'] === 'colocar_json') {
+                $res = $this->colocarJson();
+                $msg = $res['ok']
+                    ? 'OK: ' . ($res['message'] ?? 'JSON colocados y subidos.')
+                    : 'Error: ' . ($res['message'] ?? 'desconocido');
             } elseif ($_POST['_action'] === 'mover_outbox') {
                 $this->moverAOutbox($_POST['archivo'] ?? '');
                 $msg = 'Archivo movido a outbox.';
@@ -250,6 +312,7 @@ class SyncController
 
         $GLOBALS['_page_title']   = 'Sincronización';
         $GLOBALS['_sidebar_current'] = 'sync';
+        $GLOBALS['_sync_stub']    = $this->client->stub();
         require APP_PATH . '/views/sync/index.php';
     }
 

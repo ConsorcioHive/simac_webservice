@@ -43,6 +43,11 @@ class SimacCloudClient
         return $this->token;
     }
 
+    public function stub()
+    {
+        return $this->stub;
+    }
+
     // Envío multipart de archivos con manifiesto (para control_parametros).
     public function postMultipart($endpoint, $archivos, $manifiesto)
     {

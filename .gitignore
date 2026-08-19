@@ -4,3 +4,4 @@ node_modules/
 .DS_Store
 storage/sync/*.json
 !storage/sync/.gitkeep
+public/uploads/
