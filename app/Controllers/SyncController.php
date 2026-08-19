@@ -311,11 +311,20 @@ class SyncController
 
         $inbox  = $this->listarInbox();
         $outbox = $this->listarOutbox();
-        $logs   = $this->syncLog->ultimos(15);
 
+        // Registro de sincronización con búsqueda y paginación server-side.
+        $pagina = max(1, (int)($_GET['pagina'] ?? 1));
+        $porPagina = (int)($_GET['por_pagina'] ?? 15);
+        $porPagina = in_array($porPagina, [10, 15, 25, 50, 100], true) ? $porPagina : 15;
+        $q = trim((string)($_GET['q'] ?? ''));
+        list($logs, $total) = $this->syncLog->paginar($pagina, $porPagina, $q);
+        $totalPaginas = max(1, (int)ceil($total / $porPagina));
+
+        $empresa = $this->empresa->obtenerUnica();
         $GLOBALS['_page_title']   = 'Sincronización';
         $GLOBALS['_sidebar_current'] = 'sync';
         $GLOBALS['_sync_stub']    = $this->client->stub();
+        $GLOBALS['_sync_empresa'] = $empresa['nombre'] ?? '';
         require APP_PATH . '/views/sync/index.php';
     }
 

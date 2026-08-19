@@ -69,8 +69,8 @@ function mostrarArchivosSync($lista) {
 
   <div class="col-xl-8 col-lg-7">
     <div class="card">
-      <div class="card-header d-flex align-items-center justify-content-between">
-        <h5 class="mb-0">Registro de sincronización</h5>
+      <div class="card-header d-flex align-items-center justify-content-between flex-wrap gap-2">
+        <h5 class="mb-0"><i class="fa fa-history me-2"></i>Registro de sincronización — <?= htmlspecialchars($GLOBALS['_sync_empresa'] ?? '') ?></h5>
         <div class="d-flex gap-2">
           <form method="post" action="index.php?page=sync" onsubmit="return confirm('¿Vaciar todo el historial de sincronización local?');">
             <input type="hidden" name="_action" value="vaciar_log">
@@ -80,6 +80,25 @@ function mostrarArchivosSync($lista) {
         </div>
       </div>
       <div class="card-body">
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+          <form method="get" action="index.php" class="d-flex gap-2 mb-0">
+            <input type="hidden" name="page" value="sync">
+            <input type="hidden" name="por_pagina" value="<?= (int)$porPagina ?>">
+            <input type="search" name="q" value="<?= htmlspecialchars($q) ?>" class="form-control form-control-sm" placeholder="Buscar en cualquier campo...">
+            <button type="submit" class="btn btn-sm btn-primary"><i class="fa fa-search"></i></button>
+            <?php if ($q !== ''): ?>
+              <a href="index.php?page=sync&por_pagina=<?= (int)$porPagina ?>" class="btn btn-sm btn-outline-secondary"><i class="fa fa-times"></i></a>
+            <?php endif; ?>
+          </form>
+          <div class="d-flex align-items-center gap-2">
+            <span class="small text-muted">Registros por página</span>
+            <select class="form-select form-select-sm" style="width:auto;" onchange="location.href='index.php?page=sync&q=<?= urlencode($q) ?>&por_pagina='+this.value;">
+              <?php foreach ([10, 15, 25, 50, 100] as $n): ?>
+                <option value="<?= $n ?>" <?= $porPagina === $n ? 'selected' : '' ?>><?= $n ?></option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+        </div>
         <div class="table-responsive">
           <table class="table table-hover">
             <thead class="table-light">
@@ -88,7 +107,7 @@ function mostrarArchivosSync($lista) {
             <tbody>
             <?php foreach ($logs as $l): ?>
               <tr>
-                <td class="f-light f-12"><?= htmlspecialchars($l['creado_en']) ?></td>
+                <td class="f-light f-12 text-nowrap"><?= htmlspecialchars($l['creado_en']) ?></td>
                 <td><?= htmlspecialchars($l['tipo']) ?></td>
                 <td><span class="badge badge-light-secondary"><?= htmlspecialchars($l['direccion']) ?></span></td>
                 <td><span class="badge badge-light-<?= ($l['estado'] ?? '') === 'ok' ? 'success' : 'danger' ?>"><?= htmlspecialchars($l['estado']) ?></span></td>
@@ -96,11 +115,37 @@ function mostrarArchivosSync($lista) {
               </tr>
             <?php endforeach; ?>
             <?php if (empty($logs)): ?>
-              <tr><td colspan="5" class="text-center text-muted">Sin registros.</td></tr>
+              <tr><td colspan="5" class="text-center text-muted"><?= $q !== '' ? 'Sin resultados para "' . htmlspecialchars($q) . '".' : 'Sin registros.' ?></td></tr>
             <?php endif; ?>
             </tbody>
           </table>
         </div>
+
+        <?php if ($totalPaginas > 1 || $q !== ''): ?>
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mt-3">
+          <span class="small text-muted"><?= $total ?> eventos en total<?= $q !== '' ? ' (filtrados)' : '' ?></span>
+          <?php if ($totalPaginas > 1): ?>
+          <nav>
+            <ul class="pagination pagination-sm justify-content-center mb-0">
+              <li class="page-item <?= $pagina <= 1 ? 'disabled' : '' ?>">
+                <a class="page-link" href="index.php?page=sync&q=<?= urlencode($q) ?>&por_pagina=<?= $porPagina ?>&pagina=<?= $pagina - 1 ?>">&laquo;</a>
+              </li>
+              <?php
+              $inicio = max(1, $pagina - 2);
+              $fin = min($totalPaginas, $pagina + 2);
+              for ($p = $inicio; $p <= $fin; $p++): ?>
+                <li class="page-item <?= $p === $pagina ? 'active' : '' ?>">
+                  <a class="page-link" href="index.php?page=sync&q=<?= urlencode($q) ?>&por_pagina=<?= $porPagina ?>&pagina=<?= $p ?>"><?= $p ?></a>
+                </li>
+              <?php endfor; ?>
+              <li class="page-item <?= $pagina >= $totalPaginas ? 'disabled' : '' ?>">
+                <a class="page-link" href="index.php?page=sync&q=<?= urlencode($q) ?>&por_pagina=<?= $porPagina ?>&pagina=<?= $pagina + 1 ?>">&raquo;</a>
+              </li>
+            </ul>
+          </nav>
+          <?php endif; ?>
+        </div>
+        <?php endif; ?>
       </div>
     </div>
   </div>
