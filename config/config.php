@@ -25,10 +25,9 @@ define('APP_NAME', 'SIMAC Webservice');
 // URL base de la API de SIMAC. Se configura por instalación de clínica.
 define('SIMAC_CLOUD_URL', 'https://simacweb.app');
 // Token de autenticación de esta clínica ante SIMAC cloud (lo define el admin).
-define('SIMAC_API_TOKEN', '');
-// Modo stub: cuando no existen endpoints reales en la nube, el cliente
-// simula la subida/bajada escribiendo archivos en storage/sync/.
-define('SIMAC_API_STUB', true);
+define('SIMAC_API_TOKEN', 'tok_simac_1013_demo');
+// Modo real activo: la clínica se comunica con la nube (https://simacweb.app).
+define('SIMAC_API_STUB', false);
 
 // Autoloader de Composer (dompdf, phpmailer, phpspreadsheet, etc.)
 require_once BASE_PATH . '/vendor/autoload.php';
