@@ -197,7 +197,11 @@ class SyncController
         if (empty($res['ok'])) {
             return ['ok' => false, 'message' => 'JSON colocados pero falló la subida: ' . ($res['message'] ?? 'desconocido')];
         }
-        return ['ok' => true, 'message' => 'JSON colocados y subidos a la nube: ' . ($res['message'] ?? 'OK')];
+        return [
+            'ok'      => true,
+            'message' => 'JSON colocados en la clínica y subidos a la nube: ' . ($res['message'] ?? 'OK'),
+            'carpeta' => trim((string)($res['data']['carpeta'] ?? '')),
+        ];
     }
 
     // Último hash subido con éxito (último registro control_parametros_hash).
@@ -243,7 +247,20 @@ class SyncController
             'ok'      => true,
             'data'    => $data['data'] ?? [],
             'archivo' => $data['archivo'] ?? null,
+            'paquete' => $data['paquete'] ?? null,
         ];
+    }
+
+    // Endpoint AJAX (JSON) usado por la vista para consultar, en segundo plano,
+    // si la nube ya procesó el último paquete de control de parámetros subido.
+    public function respuestaAjax()
+    {
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode($this->leerRespuesta());
+        exit;
     }
 
     // Resuelve la carpeta local de control de parámetros: usa la ruta
@@ -327,9 +344,13 @@ class SyncController
                 }
             } elseif ($_POST['_action'] === 'colocar_json') {
                 $res = $this->colocarJson();
-                $msg = $res['ok']
-                    ? 'OK: ' . ($res['message'] ?? 'JSON colocados y subidos.')
-                    : 'Error: ' . ($res['message'] ?? 'desconocido');
+                if ($res['ok']) {
+                    $carpeta = $res['carpeta'] ?? '';
+                    header('Location: index.php?page=sync&m=' . urlencode('OK: ' . ($res['message'] ?? 'JSON colocados y subidos.'))
+                        . ($carpeta !== '' ? '&carpeta=' . urlencode($carpeta) : ''));
+                    exit;
+                }
+                $msg = 'Error: ' . ($res['message'] ?? 'desconocido');
             } elseif ($_POST['_action'] === 'vaciar_log') {
                 $this->pdo->exec("DELETE FROM sync_log");
                 $msg = 'Historial de sincronización local vaciado.';

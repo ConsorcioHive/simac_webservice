@@ -19,6 +19,11 @@ function mostrarArchivosSync($lista) {
         <?php if (!empty($_GET['m'])): ?>
           <div class="alert alert-success py-2"><?= htmlspecialchars($_GET['m']) ?></div>
         <?php endif; ?>
+        <?php if (!empty($_GET['carpeta'])): $carpetaEsperada = trim((string)$_GET['carpeta']); ?>
+          <div class="alert alert-info py-2" id="cp-status">
+            <strong>Proceso en la nube:</strong> paquete <code><?= htmlspecialchars($carpetaEsperada) ?></code> recibido. Esperando que el proceso del VPS termine... <span id="cp-lastcheck"></span>
+          </div>
+        <?php endif; ?>
         <div class="d-grid gap-2">
           <form method="post" action="index.php?page=sync">
             <input type="hidden" name="_action" value="subir_archivos">
@@ -164,3 +169,59 @@ function mostrarArchivosSync($lista) {
 </div>
 
 <?php require APP_PATH . '/views/layout/app_end.php'; ?>
+
+<?php if (!empty($carpetaEsperada)): ?>
+<script>
+(function () {
+    var carpeta = <?= json_encode($carpetaEsperada) ?>;
+    var intentos = 0, maxIntentos = 30, intervalo = 10000;
+    var box = document.getElementById('cp-status');
+    var last = document.getElementById('cp-lastcheck');
+    function esc(s) { var d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+    function fin() {
+        if (last) last.textContent = '';
+    }
+    function poll() {
+        fetch('index.php?page=sync_respuesta', { headers: { 'Accept': 'application/json' } })
+            .then(function (r) { return r.json(); })
+            .then(function (res) {
+                intentos++;
+                if (res && res.ok && res.paquete === carpeta && res.data && res.data.estado) {
+                    if (res.data.estado === 'procesado') {
+                        box.className = 'alert alert-success py-2';
+                        box.innerHTML = '<strong>Proceso en el VPS terminó con éxito.</strong> ' + esc(res.data.mensaje || '')
+                            + (res.data.detalle ? '<br><small>' + esc(res.data.detalle) + '</small>' : '');
+                        fin();
+                        return;
+                    }
+                    if (res.data.estado === 'rechazado') {
+                        box.className = 'alert alert-danger py-2';
+                        box.innerHTML = '<strong>El VPS rechazó el paquete.</strong> ' + esc(res.data.mensaje || '');
+                        fin();
+                        return;
+                    }
+                }
+                if (intentos >= maxIntentos) {
+                    box.className = 'alert alert-warning py-2';
+                    box.innerHTML = 'El paquete se subió, pero todavía no se confirma el procesamiento en la nube. Puedes usar <em>Leer respuesta de la nube</em> más tarde.';
+                    fin();
+                    return;
+                }
+                if (last) last.textContent = 'Última comprobación: ' + new Date().toLocaleTimeString();
+                setTimeout(poll, intervalo);
+            })
+            .catch(function () {
+                intentos++;
+                if (intentos >= maxIntentos) {
+                    box.className = 'alert alert-warning py-2';
+                    box.innerHTML = 'No se pudo confirmar el procesamiento. Usa <em>Leer respuesta de la nube</em> más tarde.';
+                    fin();
+                    return;
+                }
+                setTimeout(poll, intervalo);
+            });
+    }
+    setTimeout(poll, intervalo);
+})();
+</script>
+<?php endif; ?>

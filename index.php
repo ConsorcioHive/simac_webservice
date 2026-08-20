@@ -83,6 +83,11 @@ switch ($page) {
         $controller->index();
         break;
 
+    case 'sync_respuesta':
+        $controller = new SyncController();
+        $controller->respuestaAjax();
+        break;
+
     case 'sync_log':
         $controller = new SyncController();
         $controller->log();
