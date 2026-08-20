@@ -1,5 +1,6 @@
 <?php
-// sync/subir_archivos.php  — CLI: sube control de parámetros (prespuestos/servicios) a SIMAC cloud.
+// sync/subir_archivos.php  — CLI: sube control de parámetros (prespuestos,
+// servicios, clientes, convenios y/o medicos) a SIMAC cloud.
 // Uso (Task Scheduler / cron): php sync/subir_archivos.php
 require __DIR__ . '/../config/config.php';
 

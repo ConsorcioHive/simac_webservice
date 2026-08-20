@@ -37,16 +37,16 @@ function mostrarArchivosSync($lista) {
         <h5 class="mb-0">Colocar JSON de control de parámetros</h5>
       </div>
       <div class="card-body">
-        <p class="small text-muted mb-2">Selecciona los archivos generados por el sistema externo. Se guardan en la carpeta configurada de la clínica y se suben a la nube automáticamente. <code>clientes.json</code> y <code>convenios.json</code> son opcionales.</p>
+        <p class="small text-muted mb-2">Selecciona los archivos generados por el sistema externo. Se guardan en la carpeta configurada de la clínica y se suben a la nube automáticamente. Todos los tipos son opcionales e independientes (p. ej. puedes subir solo <code>clientes.json</code>).</p>
         <form method="post" action="index.php?page=sync" enctype="multipart/form-data">
           <input type="hidden" name="_action" value="colocar_json">
           <div class="mb-2">
-            <label class="form-label small mb-1">prespuestos.json</label>
-            <input type="file" class="form-control form-control-sm" name="prespuestos_json" accept=".json,application/json" required>
+            <label class="form-label small mb-1">prespuestos.json <span class="text-muted">(opcional)</span></label>
+            <input type="file" class="form-control form-control-sm" name="prespuestos_json" accept=".json,application/json">
           </div>
           <div class="mb-2">
-            <label class="form-label small mb-1">servicios.json</label>
-            <input type="file" class="form-control form-control-sm" name="servicios_json" accept=".json,application/json" required>
+            <label class="form-label small mb-1">servicios.json <span class="text-muted">(opcional)</span></label>
+            <input type="file" class="form-control form-control-sm" name="servicios_json" accept=".json,application/json">
           </div>
           <div class="mb-2">
             <label class="form-label small mb-1">clientes.json <span class="text-muted">(opcional)</span></label>
@@ -55,6 +55,10 @@ function mostrarArchivosSync($lista) {
           <div class="mb-2">
             <label class="form-label small mb-1">convenios.json <span class="text-muted">(opcional)</span></label>
             <input type="file" class="form-control form-control-sm" name="convenios_json" accept=".json,application/json">
+          </div>
+          <div class="mb-2">
+            <label class="form-label small mb-1">medicos.json <span class="text-muted">(opcional)</span></label>
+            <input type="file" class="form-control form-control-sm" name="medicos_json" accept=".json,application/json">
           </div>
           <button type="submit" class="btn btn-success w-100"><i class="fa fa-upload me-2"></i>Colocar y sincronizar</button>
         </form>
