@@ -7,6 +7,7 @@ use App\Controllers\DashboardController;
 use App\Controllers\EmpresaController;
 use App\Controllers\UsuarioController;
 use App\Controllers\SyncController;
+use App\Controllers\AlmacenesController;
 use App\Helpers\Session;
 
 try {
@@ -92,6 +93,21 @@ switch ($page) {
         $controller = new SyncController();
         $controller->log();
         break;
+
+    case 'almacenes':
+        $controller = new AlmacenesController();
+        $controller->index();
+        break;
+
+    case 'almacenes_colocar':
+        $controller = new AlmacenesController();
+        $result = $controller->colocarJson();
+        if (!empty($result['ok'])) {
+            header('Location: index.php?page=almacenes&m=' . urlencode($result['message'] ?? 'OK'));
+        } else {
+            header('Location: index.php?page=almacenes&m=' . urlencode('Error: ' . ($result['message'] ?? 'desconocido')));
+        }
+        exit;
 
     default:
         http_response_code(404);

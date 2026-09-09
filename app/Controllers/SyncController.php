@@ -85,6 +85,9 @@ class SyncController
             'clientes'    => 'clientes.json',
             'convenios'   => 'convenios.json',
             'medicos'     => 'medicos.json',
+            'productos'   => 'productos.json',
+            'existencias' => 'existencias.json',
+            'almacenes'   => 'almacenes.json',
         ];
 
         $presentes = [];
@@ -166,6 +169,9 @@ class SyncController
             'clientes_json'    => 'clientes.json',
             'convenios_json'   => 'convenios.json',
             'medicos_json'     => 'medicos.json',
+            'productos_json'   => 'productos.json',
+            'existencias_json' => 'existencias.json',
+            'almacenes_json'   => 'almacenes.json',
         ];
 
         $colocados = 0;

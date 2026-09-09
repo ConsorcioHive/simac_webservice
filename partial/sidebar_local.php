@@ -14,10 +14,11 @@ $rol = $_SESSION['usuario_rol'] ?? '';
 $homePage = 'dashboard';
 $current = $GLOBALS['_sidebar_current'] ?? 'dashboard';
 $menu = [
-    'dashboard' => ['label' => 'Dashboard', 'icon' => 'home', 'url' => 'index.php?page=dashboard'],
-    'usuarios'  => ['label' => 'Usuarios',  'icon' => 'user', 'url' => 'index.php?page=usuarios'],
-    'empresa'   => ['label' => 'Empresa',   'icon' => 'briefcase', 'url' => 'index.php?page=empresas_form'],
-    'sync'      => ['label' => 'Sincronización', 'icon' => 'refresh-cw', 'url' => 'index.php?page=sync'],
+    'dashboard'  => ['label' => 'Dashboard', 'icon' => 'home', 'url' => 'index.php?page=dashboard'],
+    'usuarios'   => ['label' => 'Usuarios',  'icon' => 'user', 'url' => 'index.php?page=usuarios'],
+    'empresa'    => ['label' => 'Empresa',   'icon' => 'briefcase', 'url' => 'index.php?page=empresas_form'],
+    'almacenes'  => ['label' => 'Almacenes',  'icon' => 'package', 'url' => 'index.php?page=almacenes'],
+    'sync'       => ['label' => 'Sincronización', 'icon' => 'refresh-cw', 'url' => 'index.php?page=sync'],
 ];
 ?>
 <div class="sidebar-wrapper" sidebar-layout="default-sidebar">

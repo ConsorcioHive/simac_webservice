@@ -65,6 +65,18 @@ function mostrarArchivosSync($lista) {
             <label class="form-label small mb-1">medicos.json <span class="text-muted">(opcional)</span></label>
             <input type="file" class="form-control form-control-sm" name="medicos_json" accept=".json,application/json">
           </div>
+          <div class="mb-2">
+            <label class="form-label small mb-1">productos.json <span class="text-muted">(opcional)</span></label>
+            <input type="file" class="form-control form-control-sm" name="productos_json" accept=".json,application/json">
+          </div>
+          <div class="mb-2">
+            <label class="form-label small mb-1">existencias.json <span class="text-muted">(opcional)</span></label>
+            <input type="file" class="form-control form-control-sm" name="existencias_json" accept=".json,application/json">
+          </div>
+          <div class="mb-2">
+            <label class="form-label small mb-1">almacenes.json <span class="text-muted">(opcional)</span></label>
+            <input type="file" class="form-control form-control-sm" name="almacenes_json" accept=".json,application/json">
+          </div>
           <button type="submit" class="btn btn-success w-100"><i class="fa fa-upload me-2"></i>Colocar y sincronizar</button>
         </form>
       </div>
