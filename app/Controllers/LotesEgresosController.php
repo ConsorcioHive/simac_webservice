@@ -110,7 +110,7 @@ class LotesEgresosController
             return ['ok' => false, 'message' => 'Código de lote inválido.'];
         }
 
-        $res = $this->client->get('/index.php?page=egreso_lote_pull', ['codigo_lote' => $codigo]);
+        $res = $this->client->get('/index.php', ['page' => 'egreso_lote_pull', 'codigo_lote' => $codigo]);
         $data = is_array($res['data'] ?? null) ? $res['data'] : [];
         if (empty($res['ok']) || empty($data['ok'])) {
             $msg = $data['error'] ?? ($res['error'] ?? ($res['data']['msg'] ?? 'HTTP ' . ($res['http'] ?? '?')));
@@ -259,7 +259,7 @@ class LotesEgresosController
     /** null = no se pudo consultar; array = lista de lotes. */
     private function cloudPendientes(): ?array
     {
-        $res = $this->client->get('/index.php?page=egreso_lotes_pendientes');
+        $res = $this->client->get('/index.php', ['page' => 'egreso_lotes_pendientes']);
         if (empty($res['ok']) || empty($res['data']['ok'])) {
             return null;
         }
