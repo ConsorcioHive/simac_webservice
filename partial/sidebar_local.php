@@ -18,6 +18,7 @@ $menu = [
     'usuarios'   => ['label' => 'Usuarios',  'icon' => 'user', 'url' => 'index.php?page=usuarios'],
     'empresa'    => ['label' => 'Empresa',   'icon' => 'briefcase', 'url' => 'index.php?page=empresas_form'],
     'almacenes'  => ['label' => 'Almacenes',  'icon' => 'package', 'url' => 'index.php?page=almacenes'],
+    'lotes_egresos' => ['label' => 'Lotes de Egreso', 'icon' => 'folder', 'url' => 'index.php?page=lotes_egresos'],
     'sync'       => ['label' => 'Sincronización', 'icon' => 'refresh-cw', 'url' => 'index.php?page=sync'],
 ];
 ?>

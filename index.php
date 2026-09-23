@@ -8,6 +8,7 @@ use App\Controllers\EmpresaController;
 use App\Controllers\UsuarioController;
 use App\Controllers\SyncController;
 use App\Controllers\AlmacenesController;
+use App\Controllers\LotesEgresosController;
 use App\Helpers\Session;
 
 try {
@@ -107,6 +108,23 @@ switch ($page) {
         } else {
             header('Location: index.php?page=almacenes&m=' . urlencode('Error: ' . ($result['message'] ?? 'desconocido')));
         }
+        exit;
+
+    case 'lotes_egresos':
+        $controller = new LotesEgresosController();
+        $controller->index();
+        break;
+
+    case 'lotes_egresos_traer':
+        $controller = new LotesEgresosController();
+        $result = $controller->traer();
+        header('Location: index.php?page=lotes_egresos&m=' . urlencode((!empty($result['ok']) ? '' : 'Error: ') . ($result['message'] ?? 'OK')));
+        exit;
+
+    case 'lotes_egresos_traer_todos':
+        $controller = new LotesEgresosController();
+        $result = $controller->traerTodos();
+        header('Location: index.php?page=lotes_egresos&m=' . urlencode((!empty($result['ok']) ? '' : 'Error: ') . ($result['message'] ?? 'OK')));
         exit;
 
     default:
