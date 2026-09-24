@@ -100,6 +100,134 @@ class LotesEgresosController
     }
 
     /**
+     * AJAX: explora el árbol de archivos de un lote descargado.
+     * GET codigo=<lote>&sub=<ruta relativa opcional dentro del lote>
+     */
+    public function explorar(): void
+    {
+        header('Content-Type: application/json');
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
+
+        $codigo = trim((string)($_GET['codigo'] ?? ''));
+        $sub = trim((string)($_GET['sub'] ?? ''));
+
+        if ($codigo === '' || !preg_match('/^[A-Za-z0-9_\-]+$/', $codigo)) {
+            echo json_encode(['ok' => false, 'msg' => 'Código de lote inválido.']);
+            return;
+        }
+
+        $base = rtrim($this->carpetaLotes(), '/\\') . '/';
+        $dirLote = $base . $codigo . '/';
+        if (!is_dir($dirLote)) {
+            echo json_encode(['ok' => false, 'msg' => 'El lote no existe en disco.']);
+            return;
+        }
+
+        // Ruta relativa: sin .., sin absoluta, solo segmentos seguros
+        $ruta = $dirLote;
+        if ($sub !== '') {
+            $sub = str_replace('\\', '/', $sub);
+            if (strpos($sub, '..') !== false || $sub[0] === '/' || !preg_match('#^[A-Za-z0-9_\-./ ]+$#', $sub)) {
+                echo json_encode(['ok' => false, 'msg' => 'Ruta no permitida.']);
+                return;
+            }
+            $ruta = rtrim($dirLote, '/\\') . '/' . trim($sub, '/') . '/';
+        }
+
+        $realBase = realpath($dirLote);
+        $realRuta = realpath(rtrim($ruta, '/\\'));
+        if ($realBase === false || $realRuta === false || strpos($realRuta, $realBase) !== 0 || !is_dir($realRuta)) {
+            echo json_encode(['ok' => false, 'msg' => 'Ruta fuera del lote.']);
+            return;
+        }
+
+        $items = [];
+        $manInfo = null;
+        $manPath = $dirLote . 'manifiesto_' . $codigo . '.json';
+        if (is_file($manPath)) {
+            $manTmp = json_decode((string)@file_get_contents($manPath), true);
+            if (is_array($manTmp)) {
+                $manInfo = $manTmp;
+            }
+        }
+
+        // Mapa id de admisión → etiquetas legibles (correlativo, paciente…)
+        $mapaAdm = [];
+        if (is_array($manInfo)) {
+            foreach (($manInfo['admisiones'] ?? []) as $mAdm) {
+                $mid = (int)($mAdm['id'] ?? 0);
+                if ($mid > 0) {
+                    $mapaAdm[$mid] = [
+                        'correlativo'      => $mAdm['correlativo'] ?? null,
+                        'fecha'            => $mAdm['fecha'] ?? null,
+                        'responsable_tipo' => $mAdm['responsable_tipo'] ?? null,
+                        'paciente_nombre'  => $mAdm['paciente_nombre'] ?? null,
+                    ];
+                }
+            }
+        }
+
+        foreach (scandir($realRuta) ?: [] as $nombre) {
+            if ($nombre === '.' || $nombre === '..') {
+                continue;
+            }
+            $full = $realRuta . DIRECTORY_SEPARATOR . $nombre;
+            $esDir = is_dir($full);
+            $rel = ($sub !== '' ? trim($sub, '/') . '/' : '') . $nombre;
+            $item = [
+                'nombre' => $nombre,
+                'tipo'   => $esDir ? 'dir' : 'file',
+                'ruta'   => $rel,
+                'ruta_local' => $full . ($esDir ? DIRECTORY_SEPARATOR : ''),
+                'tam'    => $esDir ? null : (int)@filesize($full),
+                'mtime'  => date('Y-m-d H:i', (int)@filemtime($full)),
+            ];
+            // admision_<id> → correlativo y etiqueta desde el manifiesto
+            if ($esDir && preg_match('/^admision_(\d+)$/', $nombre, $mm)) {
+                $item['admision_id'] = (int)$mm[1];
+                $item['admision'] = $mapaAdm[(int)$mm[1]] ?? null;
+            }
+            $items[] = $item;
+        }
+
+        usort($items, function ($a, $b) {
+            if ($a['tipo'] !== $b['tipo']) {
+                return $a['tipo'] === 'dir' ? -1 : 1;
+            }
+            return strcmp($a['nombre'], $b['nombre']);
+        });
+
+        // Resumen del manifiesto si estamos en la raíz del lote
+        $meta = [];
+        if (is_array($manInfo)) {
+            $meta = [
+                'total_admisiones' => (int)($manInfo['total_admisiones'] ?? 0),
+                'total_documentos' => (int)($manInfo['total_documentos'] ?? 0),
+                'empresa'          => (string)($manInfo['empresa']['nombre'] ?? ''),
+                'fecha'            => (string)($manInfo['fecha_hora'] ?? ''),
+            ];
+        }
+
+        echo json_encode([
+            'ok'     => true,
+            'codigo' => $codigo,
+            'sub'    => $sub,
+            'items'  => $items,
+            'meta'   => $meta,
+            'ruta_local'  => $realBase . DIRECTORY_SEPARATOR,
+            'ruta_relativa' => 'public/uploads/empresas/'
+                . ($this->empresa->obtenerUnica()['company_code'] ?? '')
+                . '/archivos/lotes_egresos/' . $codigo . '/',
+            // URL base para abrir archivos (ruta web relativa al webservice)
+            'url_base' => BASE_URL . 'public/uploads/empresas/'
+                . ($this->empresa->obtenerUnica()['company_code'] ?? '')
+                . '/archivos/lotes_egresos/' . rawurlencode($codigo) . '/',
+        ], JSON_UNESCAPED_UNICODE);
+    }
+
+    /**
      * Descarga un lote completo: JSONs raíz + adjuntos por admisión + confirmación.
      * Idempotente: si el archivo ya existe no lo vuelve a bajar.
      */
@@ -125,6 +253,7 @@ class LotesEgresosController
         }
 
         $dirLote = rtrim($this->carpetaLotes(), '/') . '/' . $codigo . '/';
+        $yaExistia = is_dir($dirLote) && is_file($dirLote . 'manifiesto_' . $codigo . '.json');
         if (!is_dir($dirLote)) {
             @mkdir($dirLote, 0775, true);
         }
@@ -135,6 +264,7 @@ class LotesEgresosController
 
         $docsOk = 0;
         $docsErr = 0;
+        $docsYa = 0;
         $totalDocs = 0;
         $admisiones = $manifiesto['admisiones'] ?? [];
         foreach ($admisiones as $adm) {
@@ -161,6 +291,7 @@ class LotesEgresosController
                 $destino = $dirAdm . $nombre;
                 if (is_file($destino) && filesize($destino) > 0) {
                     $docsOk++;
+                    $docsYa++;
                     continue;
                 }
                 if ($this->descargarArchivo($url, $destino)) {
@@ -172,7 +303,9 @@ class LotesEgresosController
         }
 
         $nAdm = is_array($admisiones) ? count($admisiones) : 0;
-        $resumen = "Lote $codigo: $nAdm admisiones, $docsOk/$totalDocs archivos";
+        $prefijo = $yaExistia ? 'Re-descarga de lote local' : 'Lote nuevo';
+        $reusa = $docsYa > 0 ? " ($docsYa archivo(s) ya existían, no se repitieron)" : '';
+        $resumen = "$prefijo $codigo: $nAdm admisiones, $docsOk/$totalDocs archivos$reusa";
 
         // Solo confirmar si bajó todo: así "pendientes" permite reintentar docs faltantes.
         if ($docsErr > 0) {
@@ -221,6 +354,8 @@ class LotesEgresosController
             $item = [
                 'codigo' => $nombre,
                 'fecha' => date('Y-m-d H:i', @filemtime($dir) ?: time()),
+                'orden_fecha' => @filemtime($dir) ?: 0,
+                'ruta_local' => rtrim($dir, '/\\') . DIRECTORY_SEPARATOR,
                 'total_admisiones' => null,
                 'total_documentos' => null,
                 'admisiones' => [],
@@ -236,21 +371,77 @@ class LotesEgresosController
                     $item['total_admisiones'] = (int)($man['total_admisiones'] ?? 0);
                     $item['total_documentos'] = (int)($man['total_documentos'] ?? 0);
                     $item['empresa'] = (string)($man['empresa']['nombre'] ?? '');
+                    // Fecha real del envío (más confiable que mtime de la carpeta)
+                    $fh = (string)($man['fecha_hora'] ?? '');
+                    if ($fh !== '') {
+                        $item['fecha'] = substr($fh, 0, 16);
+                        $ts = strtotime($fh);
+                        if ($ts !== false) {
+                            $item['orden_fecha'] = $ts;
+                        }
+                    }
+                    // Mapa id → correlativo/paciente para las carpetas admision_*
+                    $mapaAdm = [];
+                    foreach (($man['admisiones'] ?? []) as $mAdm) {
+                        $mid = (int)($mAdm['id'] ?? 0);
+                        if ($mid > 0) {
+                            $mapaAdm[$mid] = [
+                                'correlativo' => $mAdm['correlativo'] ?? null,
+                                'paciente_nombre' => $mAdm['paciente_nombre'] ?? null,
+                            ];
+                        }
+                    }
+                    foreach (scandir($dir) ?: [] as $sub) {
+                        if (strpos($sub, 'admision_') !== 0 || !is_dir($dir . '/' . $sub)) {
+                            continue;
+                        }
+                        $docs = array_diff(scandir($dir . '/' . $sub) ?: [], ['.', '..']);
+                        $nDocs = count($docs);
+                        $item['docs_totales'] += $nDocs;
+                        $aid = 0;
+                        if (preg_match('/^admision_(\d+)$/', $sub, $mm)) {
+                            $aid = (int)$mm[1];
+                        }
+                        $item['admisiones'][] = [
+                            'carpeta' => $sub,
+                            'docs' => $nDocs,
+                            'admision_id' => $aid,
+                            'correlativo' => $mapaAdm[$aid]['correlativo'] ?? null,
+                            'paciente_nombre' => $mapaAdm[$aid]['paciente_nombre'] ?? null,
+                        ];
+                    }
                 }
             }
-
-            foreach (scandir($dir) ?: [] as $sub) {
-                if (strpos($sub, 'admision_') !== 0 || !is_dir($dir . '/' . $sub)) {
-                    continue;
+            if (empty($item['admisiones'])) {
+                foreach (scandir($dir) ?: [] as $sub) {
+                    if (strpos($sub, 'admision_') !== 0 || !is_dir($dir . '/' . $sub)) {
+                        continue;
+                    }
+                    $docs = array_diff(scandir($dir . '/' . $sub) ?: [], ['.', '..']);
+                    $nDocs = count($docs);
+                    $item['docs_totales'] += $nDocs;
+                    $aid = 0;
+                    if (preg_match('/^admision_(\d+)$/', $sub, $mm)) {
+                        $aid = (int)$mm[1];
+                    }
+                    $item['admisiones'][] = [
+                        'carpeta' => $sub,
+                        'docs' => $nDocs,
+                        'admision_id' => $aid,
+                        'correlativo' => null,
+                        'paciente_nombre' => null,
+                    ];
                 }
-                $docs = array_diff(scandir($dir . '/' . $sub) ?: [], ['.', '..']);
-                $nDocs = count($docs);
-                $item['docs_totales'] += $nDocs;
-                $item['admisiones'][] = ['carpeta' => $sub, 'docs' => $nDocs];
             }
             $out[] = $item;
         }
+        // Más reciente primero (fecha del manifiesto / carpeta)
         usort($out, function ($a, $b) {
+            $fa = (int)($a['orden_fecha'] ?? 0);
+            $fb = (int)($b['orden_fecha'] ?? 0);
+            if ($fa !== $fb) {
+                return $fb <=> $fa;
+            }
             return strcmp((string)$b['codigo'], (string)$a['codigo']);
         });
         return $out;

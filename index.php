@@ -127,6 +127,11 @@ switch ($page) {
         header('Location: index.php?page=lotes_egresos&m=' . urlencode((!empty($result['ok']) ? '' : 'Error: ') . ($result['message'] ?? 'OK')));
         exit;
 
+    case 'lotes_egresos_explorar':
+        $controller = new LotesEgresosController();
+        $controller->explorar();
+        break;
+
     default:
         http_response_code(404);
         die('Página no encontrada.');
