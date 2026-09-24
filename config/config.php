@@ -23,9 +23,13 @@ define('APP_NAME', 'SIMAC Webservice');
 
 // ── Destino en la nube (SIMAC) ──────────────────────────────────────────────
 // URL base de la API de SIMAC. Se configura por instalación de clínica.
+// El token de nube se lee de empresas.simac_api_token (por company_code);
+// el valor de abajo es SOLO fallback para instalaciones sin fila configurada.
 define('SIMAC_CLOUD_URL', 'https://simacweb.app');
-// Token de autenticación de esta clínica ante SIMAC cloud (lo define el admin).
-define('SIMAC_API_TOKEN', 'tok_simac_1013_demo');
+define('SIMAC_API_TOKEN_FALLBACK', 'tok_simac_1013_demo');
+if (!defined('SIMAC_API_TOKEN')) {
+    define('SIMAC_API_TOKEN', SIMAC_API_TOKEN_FALLBACK);
+}
 // Modo real activo: la clínica se comunica con la nube (https://simacweb.app).
 define('SIMAC_API_STUB', false);
 

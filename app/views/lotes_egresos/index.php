@@ -43,7 +43,8 @@ foreach ($lotesLocales as $l) {
                   <th>Adm.</th>
                   <th>Archivos</th>
                   <th>JSON</th>
-                  <th>Estado</th>
+                  <th>Estado nube</th>
+                  <th>ERP</th>
                   <th>Detalle</th>
                 </tr>
               </thead>
@@ -62,6 +63,18 @@ foreach ($lotesLocales as $l) {
                     <?php endif; ?>
                   </td>
                   <td><span class="badge bg-info text-dark"><i class="fa fa-check me-1"></i>Descargado</span></td>
+                  <td>
+                    <?php
+                    $est = (string)($l['estado'] ?? 'descargado');
+                    if ($est === 'disponible'):
+                    ?>
+                      <span class="badge bg-success">Disponible</span>
+                    <?php elseif ($est === 'consumido'): ?>
+                      <span class="badge bg-secondary">Consumido</span>
+                    <?php else: ?>
+                      <span class="badge bg-warning text-dark">Descargado</span>
+                    <?php endif; ?>
+                  </td>
                   <td class="small">
                     <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2 btn-ver-lote" data-codigo="<?= htmlspecialchars($l['codigo'], ENT_QUOTES) ?>">
                       <i class="fa fa-folder-open"></i> Ver
@@ -74,9 +87,12 @@ foreach ($lotesLocales as $l) {
           </div>
           <p class="small text-muted mt-2 mb-0">
             Clic en una fila o en <strong>Ver</strong> para explorar carpetas y archivos.
-            Orden: más reciente primero. Ruta relativa:
-            <code>public/uploads/empresas/&lt;code&gt;/archivos/lotes_egresos/</code>
-            (la ruta absoluta se ve en el modal; el ERP recoge la data de ahí).
+            Orden: más reciente primero. Columna <strong>ERP</strong>:
+            <span class="badge bg-success">Disponible</span> listo para
+            <code>GET /api/v1/lotes?estado=disponible</code> del sistema externo;
+            <span class="badge bg-secondary">Consumido</span> ya lo procesó
+            (<code>POST /api/v1/lotes/{codigo}/consumir</code>).
+            Ruta absoluta en el modal (la recoge el ERP).
           </p>
         <?php endif; ?>
       </div>

@@ -1,0 +1,6 @@
+# API v1 local — rewrite para Apache/XAMPP
+# Permite: /api/v1/lotes  →  index.php (detección por REQUEST_URI)
+RewriteEngine On
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_URI} api/v1
+RewriteRule ^api/v1/?(.*)$ index.php?page=api_v1&path=$1 [L,QSA]

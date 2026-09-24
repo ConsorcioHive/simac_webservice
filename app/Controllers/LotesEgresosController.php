@@ -10,7 +10,9 @@ namespace App\Controllers;
 use App\Models\Empresa;
 use App\Models\SyncLog;
 use App\Services\SimacCloudClient;
+use App\Services\LoteNotify;
 use App\Core\Database;
+use App\Controllers\ApiController;
 
 class LotesEgresosController
 {
@@ -329,10 +331,67 @@ class LotesEgresosController
         }
 
         $this->syncLog->registrar('lotes_egresos', 'descarga', 'ok', $docsOk, $resumen . ' (confirmado)');
+        // Marcar en lotes_locales como disponible para que el ERP externo lo consuma.
+        try {
+            $api = new ApiController();
+            $companyCode = trim((string)($this->empresa->obtenerUnica()['company_code'] ?? ''));
+            $man = is_array($manifiesto) ? $manifiesto : [];
+            $api->marcarDisponible($companyCode, $codigo, [
+                'ruta_local' => rtrim($dirLote, '/\\') . DIRECTORY_SEPARATOR,
+                'total_admisiones' => (int)($man['total_admisiones'] ?? $nAdm),
+                'total_documentos' => (int)($man['total_documentos'] ?? $totalDocs),
+                'docs_ok' => $docsOk,
+                'metadata' => [
+                    'confirmado_nube' => true,
+                    'ya_existia' => $yaExistia,
+                ],
+            ]);
+        } catch (\Throwable $e) {
+            // No romper la descarga si falla el estado local
+            $this->syncLog->registrar('lotes_egresos', 'estado', 'error', 0,
+                "No se pudo marcar disponible $codigo: " . $e->getMessage());
+        }
+        // Aviso solo en lote nuevo (no en re-descarga)
+        if (!$yaExistia) {
+            try {
+                LoteNotify::loteNuevoDisponible($codigo, [
+                    'admisiones' => $nAdm,
+                    'documentos' => $docsOk,
+                    'ruta_local' => rtrim($dirLote, '/\\') . DIRECTORY_SEPARATOR,
+                ]);
+            } catch (\Throwable $e) {
+                $this->syncLog->registrar('lotes_egresos', 'notify', 'error', 0,
+                    "Email lote nuevo falló: " . $e->getMessage());
+            }
+        }
         return [
             'ok' => true,
             'message' => "$resumen descargado y confirmado.",
         ];
+    }
+
+    /**
+     * Contadores para el badge del sidebar (sin llamar a la nube).
+     * disponibles = lotes listos que el ERP aún no consume.
+     */
+    public static function contadoresBadge(): array
+    {
+        $out = ['disponibles' => 0, 'pendientes_nube' => null];
+        try {
+            $pdo = Database::getConnection();
+            $e = (new Empresa())->obtenerUnica();
+            $code = trim((string)($e['company_code'] ?? ''));
+            if ($code !== '') {
+                $stmt = $pdo->prepare(
+                    "SELECT COUNT(*) AS n FROM lotes_locales WHERE company_code = :c AND estado = 'disponible'"
+                );
+                $stmt->execute(['c' => $code]);
+                $out['disponibles'] = (int)($stmt->fetchColumn() ?: 0);
+            }
+        } catch (\Throwable $e) {
+            // tabla puede no existir aún
+        }
+        return $out;
     }
 
     /** Lotes ya bajados a disco (carpetas). */
@@ -356,6 +415,7 @@ class LotesEgresosController
                 'fecha' => date('Y-m-d H:i', @filemtime($dir) ?: time()),
                 'orden_fecha' => @filemtime($dir) ?: 0,
                 'ruta_local' => rtrim($dir, '/\\') . DIRECTORY_SEPARATOR,
+                'estado' => 'descargado',
                 'total_admisiones' => null,
                 'total_documentos' => null,
                 'admisiones' => [],
@@ -363,6 +423,7 @@ class LotesEgresosController
                 'json_ok' => is_file($dir . '/consolidado_' . $nombre . '.json')
                     && is_file($dir . '/manifiesto_' . $nombre . '.json'),
             ];
+            $item['estado'] = $this->estadoLote($nombre) ?: 'descargado';
 
             $manPath = $dir . '/manifiesto_' . $nombre . '.json';
             if (is_file($manPath)) {
@@ -469,6 +530,22 @@ class LotesEgresosController
             @mkdir($base, 0775, true);
         }
         return rtrim($base, '/\\') . '/';
+    }
+
+    /** Estado del lote en lotes_locales (descargado|disponible|consumido). */
+    private function estadoLote(string $codigo): string
+    {
+        try {
+            $companyCode = trim((string)($this->empresa->obtenerUnica()['company_code'] ?? ''));
+            $stmt = $this->pdo->prepare(
+                'SELECT estado FROM lotes_locales WHERE company_code = :c AND codigo = :k LIMIT 1'
+            );
+            $stmt->execute(['c' => $companyCode, 'k' => $codigo]);
+            $row = $stmt->fetch();
+            return $row ? (string)$row['estado'] : '';
+        } catch (\Throwable $e) {
+            return '';
+        }
     }
 
     private function nombreSeguro(string $n): string

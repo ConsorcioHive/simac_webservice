@@ -58,6 +58,10 @@ $menu = [
             <i class="fa fa-thumb-tack"></i>
             <a class="sidebar-link sidebar-title link-nav <?= $current === $key ? 'active' : '' ?>" href="<?= BASE_URL . $item['url'] ?>">
               <i data-feather="<?= $item['icon'] ?>" style="width: 18px;"></i><span><?= $item['label'] ?></span>
+              <?php if ($key === 'lotes_egresos' && !empty($GLOBALS['_badge_lotes']['disponibles'])): ?>
+                <span class="badge rounded-pill bg-danger ms-auto" title="Lotes disponibles para el ERP"
+                      style="font-size:.65rem;"><?= (int)$GLOBALS['_badge_lotes']['disponibles'] ?></span>
+              <?php endif; ?>
             </a>
           </li>
           <?php endforeach; ?>

@@ -8,6 +8,14 @@ $empresaModel = new \App\Models\Empresa();
 $empresaActiva = $empresaModel->obtenerUnica();
 
 $GLOBALS['_sidebar_current'] = $GLOBALS['_sidebar_current'] ?? 'dashboard';
+
+// Badge sidebar: lotes "disponibles" (sin llamar a la nube)
+$GLOBALS['_badge_lotes'] = ['disponibles' => 0];
+try {
+    $GLOBALS['_badge_lotes'] = \App\Controllers\LotesEgresosController::contadoresBadge();
+} catch (\Throwable $e) {
+    // noop
+}
 ?>
 <div class="page-wrapper compact-wrapper" id="pageWrapper">
   <?php require BASE_PATH . '/partial/topbar_local.php'; ?>
