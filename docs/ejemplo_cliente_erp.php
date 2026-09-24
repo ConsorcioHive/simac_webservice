@@ -13,7 +13,9 @@
  */
 
 // ── Configuración ──────────────────────────────────────────────────────────
-$BASE = 'http://localhost/simac_webservice/api/v1'; // URL base de la API
+// IP de la máquina servidor en la red local de la clínica.
+// (En la misma máquina usar: http://localhost/simac_webservice/api/v1)
+$BASE = 'http://192.168.0.10/simac_webservice/api/v1'; // URL base de la API
 $KEY  = 'erp_1013_1c4e76d7b8ff65a8bdb086181a1bcd2a7e51c922'; // API key del tenant
 $DRY  = in_array('--dry-run', $argv ?? [], true);
 

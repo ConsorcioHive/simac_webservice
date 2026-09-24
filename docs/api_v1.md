@@ -9,17 +9,25 @@ Contrato completo para sistemas externos (ERP, integraciones).
 
 ## 1. Visión general
 
+**Modelo de despliegue:** el webservice se instala **localmente en cada clínica** (XAMPP, red cerrada).  
+Cada clínica tiene su propia instalación, su propia base de datos local y su propia API.  
+La única conexión hacia afuera es la sincronización con la nube `simacweb.app`; el cliente tercero (ERP) opera **dentro de la misma red local** de la clínica.
+
 ```
-┌─────────────────────┐   pull cada 2 min    ┌──────────────────────────────┐
-│  NUBE simacweb.app  │ ───────────────────► │  WEBSERVICE (XAMPP local)    │
-│  (clínica SIMAC)    │  token empresas.*    │  public/uploads/.../lotes/    │
-└─────────────────────┘                      └──────────────┬───────────────┘
-                                                            │  X-API-Key
-                                                            ▼
-                                               ┌──────────────────────────────┐
-                                               │  ERP / sistema externo       │
-                                               │  llama GET /api/v1/lotes     │
-                                               └──────────────────────────────┘
+  RED LOCAL DE LA CLÍNICA (cerrada)                    Internet
+┌───────────────────────────────────────────────┐   ┌──────────────────┐
+│                                               │   │  NUBE            │
+│  ┌──────────────────────────┐   pull 2 min    │   │  simacweb.app    │
+│  │  WEBSERVICE (XAMPP)      │ ◄───────────────┼───┤  (SIMAC)         │
+│  │  public/uploads/.../lotes│                 │   └──────────────────┘
+│  └────────────┬─────────────┘                 │
+│               │  X-API-Key                    │
+│               ▼                               │
+│  ┌──────────────────────────┐                 │
+│  │  Cliente tercero (ERP)   │                 │
+│  │  GET /api/v1/lotes       │                 │
+│  └──────────────────────────┘                 │
+└───────────────────────────────────────────────┘
 ```
 
 **Dos flujos distintos:**
@@ -27,9 +35,9 @@ Contrato completo para sistemas externos (ERP, integraciones).
 | Flujo | Quién | Cómo |
 |-------|-------|------|
 | Nube → webservice | Windows Task `SIMAC_TraerLotes` (cada 2 min) | Descarga lotes `enviado_local`, los deja `disponible` |
-| **ERP → webservice** | **Tu sistema** | **API `/api/v1` con `X-API-Key`** |
+| **Cliente → webservice** | **ERP / tercero en la LAN** | **API `/api/v1` con `X-API-Key`** |
 
-El ERP **nunca** habla con la nube; solo consume la API del webservice.
+El cliente **nunca** habla con la nube; solo consume la API local de su clínica.
 
 ---
 
@@ -64,17 +72,17 @@ UPDATE api_tokens SET activo = 0 WHERE token = 'erp_1013_...';
 | Estado | Significado | Quién lo cambia |
 |--------|-------------|-----------------|
 | `descargado` | Bajado de la nube y en disco (confirmación pendiente o legado) | Descarga |
-| `disponible` | **Listo para que el ERP lo consuma** | Cron / botón "Traer" |
-| `consumido` | El ERP lo procesó; no reenviar | `POST /lotes/{codigo}/consumir` |
+| `disponible` | **Listo para que el cliente lo consuma** | Cron / botón "Traer" |
+| `consumido` | El cliente lo procesó; no reenviar | `POST /lotes/{codigo}/consumir` |
 
 **Flujo completo:**
 
 ```
 nube: generado → enviado_local ──pull──► nube: recibido_local
                                           local: descargado → disponible
-                                                    │
-                                          ERP: POST /consumir
-                                                    ▼
+                                                   │
+                                         cliente: POST /consumir
+                                                   ▼
                                           local: consumido
 ```
 
@@ -82,8 +90,20 @@ nube: generado → enviado_local ──pull──► nube: recibido_local
 
 ## 4. Endpoints
 
-**Base (XAMPP):** `http://localhost/simac_webservice/api/v1/...`  
-**Fallback sin rewrite:** `http://localhost/simac_webservice/index.php?page=api_v1&path=lotes`
+### URL base
+
+| Uso | URL |
+|-----|-----|
+| **Cliente externo (misma red local)** | `http://<IP_DE_LA_MAQUINA>/simac_webservice/api/v1/...` |
+| Desarrollo en esta máquina | `http://localhost/simac_webservice/api/v1/...` |
+| Fallback sin rewrite | `http://<IP>/simac_webservice/index.php?page=api_v1&path=lotes` |
+
+> **Esta instalación (ejemplo):** IP `192.168.0.10` (interfaz Wi-Fi).  
+> Cada clínica usa **la IP de su propia máquina** en su red.  
+> Requisitos: Apache en `Listen 80` (todas las interfaces) y regla de firewall "Apache HTTP Server" (ya configurados; verificado HTTP 200 desde la IP).  
+> Si la IP DHCP cambia, actualizar la comunicación con el cliente.
+
+**Ejemplos con la IP de esta instalación:** `http://192.168.0.10/simac_webservice/api/v1/...`
 
 Todas las respuestas son JSON con forma:
 
@@ -99,7 +119,7 @@ Todas las respuestas son JSON con forma:
 Ping + tenant autenticado. Útil para verificar conexión y key.
 
 ```bash
-curl -H "X-API-Key: TU_KEY" "http://localhost/simac_webservice/api/v1/salud"
+curl -H "X-API-Key: TU_KEY" "http://192.168.0.10/simac_webservice/api/v1/salud"
 ```
 
 **200 OK:**
@@ -122,7 +142,7 @@ curl -H "X-API-Key: TU_KEY" "http://localhost/simac_webservice/api/v1/salud"
 Lista lotes locales. Query opcional: `estado=disponible|descargado|consumido` (vacío = todos).
 
 ```bash
-curl -H "X-API-Key: TU_KEY" "http://localhost/simac_webservice/api/v1/lotes?estado=disponible"
+curl -H "X-API-Key: TU_KEY" "http://192.168.0.10/simac_webservice/api/v1/lotes?estado=disponible"
 ```
 
 **200 OK:**
@@ -158,7 +178,7 @@ curl -H "X-API-Key: TU_KEY" "http://localhost/simac_webservice/api/v1/lotes?esta
 | `en_disco` | bool | (solo en algunos casos) si la carpeta existe |
 | `descargado_en` | string\|null | Cuándo se bajó de la nube |
 | `disponible_en` | string\|null | Cuándo pasó a `disponible` |
-| `consumido_en` | string\|null | Cuándo lo consumió el ERP |
+| `consumido_en` | string\|null | Cuándo lo consumió el cliente |
 
 ---
 
@@ -167,7 +187,7 @@ curl -H "X-API-Key: TU_KEY" "http://localhost/simac_webservice/api/v1/lotes?esta
 Detalle + manifiesto (empresa, fechas, admisiones con correlativo/paciente).
 
 ```bash
-curl -H "X-API-Key: TU_KEY" "http://localhost/simac_webservice/api/v1/lotes/20260923204831_1013_0001_L1"
+curl -H "X-API-Key: TU_KEY" "http://192.168.0.10/simac_webservice/api/v1/lotes/20260923204831_1013_0001_L1"
 ```
 
 **200 OK:**
@@ -263,7 +283,7 @@ curl -H "X-API-Key: TU_KEY" ".../lotes/COD/archivos?sub=admision_8"
 }
 ```
 
-Cada item incluye `ruta_local` **absoluta** para que el ERP recoja la data sin adivinar carpetas.
+Cada item incluye `ruta_local` **absoluta** para que el cliente recoja la data sin adivinar carpetas.
 
 **Archivos típicos de un lote:**
 
@@ -283,7 +303,7 @@ Marca el lote como **`consumido`**. Idempotente si ya estaba consumido (`ya_cons
 
 ```bash
 curl -X POST -H "X-API-Key: TU_KEY" -H "Content-Type: application/json" \
-  "http://localhost/simac_webservice/api/v1/lotes/COD/consumir"
+  "http://192.168.0.10/simac_webservice/api/v1/lotes/COD/consumir"
 ```
 
 **200 OK (primera vez):**
@@ -313,14 +333,14 @@ Siempre revise tanto el código HTTP como el campo `ok`.
 
 ---
 
-## 6. Ejemplo listo para el ERP (PHP + cURL)
+## 6. Ejemplo listo para el cliente (PHP + cURL)
 
 Archivo completo y ejecutable: **[`docs/ejemplo_cliente_erp.php`](ejemplo_cliente_erp.php)**
 
 ```php
 <?php
 // Configuración
-$BASE = 'http://localhost/simac_webservice/api/v1';
+$BASE = 'http://192.168.0.10/simac_webservice/api/v1';
 $KEY  = 'erp_1013_1c4e76d7b8ff65a8bdb086181a1bcd2a7e51c922';
 
 function api(string $method, string $path, string $base, string $key): array {
@@ -366,14 +386,14 @@ foreach ($lotes as $l) {
     $detalle = api('GET', '/lotes/' . $codigo, $BASE, $KEY);
     $archivos = api('GET', '/lotes/' . $codigo . '/archivos', $BASE, $KEY);
 
-    // ... aquí el ERP procesa: lee $l['ruta_local'] o usa $archivos['data']['items']
+    // ... aquí el cliente procesa: lee $l['ruta_local'] o usa $archivos['data']['items']
 
     $consumir = api('POST', '/lotes/' . $codigo . '/consumir', $BASE, $KEY);
-    echo $codigo . ' → ' . ($consumir['data']['estado'] ?? 'error') . "\n";
+    echo $codigo . ' -> ' . ($consumir['data']['estado'] ?? 'error') . "\n";
 }
 ```
 
-**Flujo mínimo que debe seguir el ERP:**
+**Flujo mínimo que debe seguir el cliente:**
 
 1. `GET /salud` → verificar que la API y la key funcionan.
 2. `GET /lotes?estado=disponible` → obtener lotes pendientes.
@@ -396,7 +416,7 @@ while (true) {
 }
 ```
 
-O desde cron/Task Scheduler cada 5 minutos invocando un script PHP que ejecute el mismo paso 2–6.
+O desde cron/Task Scheduler cada 5 minutos invocando un script PHP que ejecute el mismo paso 2 a 6.
 
 ---
 
@@ -409,27 +429,27 @@ Toda respuesta se filtra por el **`company_code` de la API key**. Una key de `10
 | Quién | Token | Hacia dónde |
 |-------|-------|-------------|
 | Webservice → nube | `empresas.simac_api_token` (o fallback config) | `https://simacweb.app` |
-| ERP → webservice | `api_tokens.token` (`X-API-Key`) | esta API `/api/v1` |
+| Cliente → webservice | `api_tokens.token` (`X-API-Key`) | esta API `/api/v1` |
 
 ---
 
 ## 10. Pull automático (Task Scheduler)
 
-`sync\traer_lotes.bat` corre **cada 2 minutos** (tarea Windows `SIMAC_TraerLotes`):
+`sync\traer_lotes.bat` corre **cada 2 minutos** (tarea Windows `SIMAC_TraerLotes`, oculta via `traer_lotes_oculto.vbs`):
 
 1. Consulta lotes `enviado_local` en la nube  
 2. Descarga JSON + adjuntos  
 3. Confirma → nube `recibido_local`  
 4. Local → estado **`disponible`**  
 5. Si es lote **nuevo**, email al `empresas.email`  
-6. Badge rojo en el sidebar “Lotes de Egreso” = cantidad `disponible`
+6. Badge rojo en el sidebar "Lotes de Egreso" = cantidad `disponible`
 
 Log: `storage\logs\traer_lotes.log`
 
 Recrear la tarea (si hace falta):
 
 ```bat
-schtasks /create /tn "SIMAC_TraerLotes" /tr "C:\xampp\htdocs\simac_webservice\sync\traer_lotes.bat" /sc minute /mo 2 /f
+schtasks /create /tn "SIMAC_TraerLotes" /tr "wscript.exe \"C:\xampp\htdocs\simac_webservice\sync\traer_lotes_oculto.vbs\"" /sc minute /mo 2 /f
 ```
 
 ---
@@ -443,7 +463,7 @@ Apache no está reescribiendo `/api/v1/...`. Use el fallback:
 **¿Recibo 401 aunque envío la key?**  
 Verifique que no la esté enviando mal (espacios, comillas). Si usa `Authorization`, debe ser `Bearer <token>`.
 
-**¿El ERP no ve archivos?**  
+**¿El cliente no ve archivos?**  
 Confirme que `ruta_local` apunta a una carpeta existente; si el lote está `consumido`, los archivos siguen en disco pero no debe reprocesarlos.
 
 **¿Cómo sé si un lote ya fue procesado?**  
@@ -452,25 +472,28 @@ El campo `consumido_en` no nulo en `GET /lotes` o el estado `consumido`.
 **¿Se puede consumir dos veces?**  
 Sí, es idempotente: devuelve `ya_consumido: true` sin error.
 
+**¿Desde otra máquina de la red no conecta?**  
+Verifique IP de la máquina servidor, firewall (regla Apache) y que no estén en redes Wi-Fi aisladas (aislamiento de clientes).
+
 ---
 
 ## 12. Prueba rápida con curl
 
 ```bash
 # Salud
-curl -H "X-API-Key: TU_KEY" "http://localhost/simac_webservice/api/v1/salud"
+curl -H "X-API-Key: TU_KEY" "http://192.168.0.10/simac_webservice/api/v1/salud"
 
 # Lotes disponibles
-curl -H "X-API-Key: TU_KEY" "http://localhost/simac_webservice/api/v1/lotes?estado=disponible"
+curl -H "X-API-Key: TU_KEY" "http://192.168.0.10/simac_webservice/api/v1/lotes?estado=disponible"
 
 # Detalle
-curl -H "X-API-Key: TU_KEY" "http://localhost/simac_webservice/api/v1/lotes/20260923204831_1013_0001_L1"
+curl -H "X-API-Key: TU_KEY" "http://192.168.0.10/simac_webservice/api/v1/lotes/20260923204831_1013_0001_L1"
 
 # Archivos
-curl -H "X-API-Key: TU_KEY" "http://localhost/simac_webservice/api/v1/lotes/20260923204831_1013_0001_L1/archivos"
+curl -H "X-API-Key: TU_KEY" "http://192.168.0.10/simac_webservice/api/v1/lotes/20260923204831_1013_0001_L1/archivos"
 
 # Consumir
-curl -X POST -H "X-API-Key: TU_KEY" "http://localhost/simac_webservice/api/v1/lotes/20260923204831_1013_0001_L1/consumir"
+curl -X POST -H "X-API-Key: TU_KEY" "http://192.168.0.10/simac_webservice/api/v1/lotes/20260923204831_1013_0001_L1/consumir"
 ```
 
 ---
@@ -481,8 +504,9 @@ curl -X POST -H "X-API-Key: TU_KEY" "http://localhost/simac_webservice/api/v1/lo
 |---------|-----------|
 | `app/Controllers/ApiController.php` | Implementación de la API |
 | `app/Controllers/LotesEgresosController.php` | Descarga desde la nube y estados |
-| `docs/ejemplo_cliente_erp.php` | Cliente PHP de ejemplo para el ERP |
+| `docs/ejemplo_cliente_erp.php` | Cliente PHP de ejemplo |
 | `docs/api_v1.md` | Este documento |
 | `sync/traer_lotes.bat` | Pull automático (Task Scheduler) |
+| `sync/traer_lotes_oculto.vbs` | Wrapper oculto para la tarea |
 | `database/migrations/2026-09-24_api_tokens.sql` | Tabla `api_tokens` |
 | `database/migrations/2026-09-24_lotes_locales.sql` | Tabla `lotes_locales` |
