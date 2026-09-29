@@ -79,6 +79,8 @@ class SyncController
         $carpeta = $this->carpetaControlParametros($empresa);
 
         // Tipos disponibles: se envían solo los que existan en la carpeta.
+        // 'migracion' es distinto: un ZIP con los JSON de migración SISMED
+        // (formato metadata/columns/records, no control_parametros).
         $candidatos = [
             'prespuestos' => 'prespuestos.json',
             'servicios'   => 'servicios.json',
@@ -89,6 +91,7 @@ class SyncController
             'existencias' => 'existencias.json',
             'almacenes'   => 'almacenes.json',
             'estado'      => 'estado.json',
+            'migracion'   => 'migracion.zip',
         ];
 
         $presentes = [];
@@ -102,11 +105,13 @@ class SyncController
             return ['ok' => false, 'message' => 'No hay archivos de control de parámetros en ' . $carpeta];
         }
 
-        // Hash combinado de los archivos actuales
-        $hashActual = hash('sha256', implode('', array_map(
-            fn($ruta) => (string)file_get_contents($ruta),
-            array_values($presentes)
-        )));
+        // Hash combinado de los archivos actuales (por archivo, sin cargarlos
+        // todos en RAM: migracion.zip pesa ~53 MB).
+        $hashCtx = hash_init('sha256');
+        foreach ($presentes as $ruta) {
+            hash_update_file($hashCtx, $ruta);
+        }
+        $hashActual = hash_final($hashCtx);
 
         if ($soloSiCambio) {
             $ultimoHash = $this->ultimoHashSubido();
@@ -131,6 +136,9 @@ class SyncController
             'estado'        => 'pendiente',
             'archivos'      => $archivos,
         ];
+        if (isset($multipart['migracion'])) {
+            $manifiesto['tipo'] = 'migracion';
+        }
 
         $res = $this->client->postMultipart('/index.php?page=control_parametros_sync_recibir', $multipart, $manifiesto);
 
@@ -191,8 +199,25 @@ class SyncController
             $colocados++;
         }
 
+        // ZIP de migración SISMED (campo aparte: no es JSON de parámetros).
+        // Al colocar uno nuevo se borra el anterior (un solo migracion.zip
+        // vigente en la carpeta de la clínica).
+        if (!empty($_FILES['migracion_zip']['name']) && ($_FILES['migracion_zip']['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK) {
+            $contenido = (string)@file_get_contents($_FILES['migracion_zip']['tmp_name']);
+            if (strncmp($contenido, 'PK', 2) !== 0) {
+                $fallos[] = 'migracion.zip no es un ZIP válido.';
+            } else {
+                $viejoZip = $carpeta . 'migracion.zip';
+                if (is_file($viejoZip)) {
+                    @unlink($viejoZip);
+                }
+                file_put_contents($carpeta . 'migracion.zip', $contenido);
+                $colocados++;
+            }
+        }
+
         if ($colocados === 0) {
-            return ['ok' => false, 'message' => 'Selecciona al menos un archivo JSON para colocar.'];
+            return ['ok' => false, 'message' => 'Selecciona al menos un archivo JSON (o migracion.zip) para colocar.'];
         }
         if (!empty($fallos)) {
             return ['ok' => false, 'message' => implode(' ', $fallos)];

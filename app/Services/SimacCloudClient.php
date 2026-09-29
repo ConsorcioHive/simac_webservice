@@ -80,7 +80,8 @@ class SimacCloudClient
             CURLOPT_POST           => true,
             CURLOPT_HTTPHEADER     => ['Authorization: Bearer ' . $this->token],
             CURLOPT_POSTFIELDS     => $post,
-            CURLOPT_TIMEOUT        => 60,
+            // 300s: la subida de migracion.zip (~53 MB) supera el antiguo 60s.
+            CURLOPT_TIMEOUT        => 300,
         ]);
 
         $resp     = curl_exec($ch);
