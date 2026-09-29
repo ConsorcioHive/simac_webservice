@@ -91,6 +91,9 @@ class SyncController
             'existencias' => 'existencias.json',
             'almacenes'   => 'almacenes.json',
             'estado'      => 'estado.json',
+            // RESUMENVTA.json: resumen de ventas del dashboard, sustituye a
+            // estado.json (formato nuevo con Cliente/Grupo1..4/Porcentaje/Mes).
+            'resumenvta'  => 'resumenvta.json',
             'migracion'   => 'migracion.zip',
         ];
 
@@ -182,6 +185,7 @@ class SyncController
             'existencias_json' => 'existencias.json',
             'almacenes_json'   => 'almacenes.json',
             'estado_json'      => 'estado.json',
+            'resumenvta_json'  => 'resumenvta.json',
         ];
 
         $colocados = 0;

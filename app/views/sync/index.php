@@ -78,8 +78,9 @@ function mostrarArchivosSync($lista) {
             <input type="file" class="form-control form-control-sm" name="almacenes_json" accept=".json,application/json">
           </div>
           <div class="mb-2">
-            <label class="form-label small mb-1">estado.json <span class="text-muted">(dashboard administración — opcional)</span></label>
-            <input type="file" class="form-control form-control-sm" name="estado_json" accept=".json,application/json">
+            <label class="form-label small mb-1">resumenvta.json <span class="text-muted">(dashboard administración — opcional)</span></label>
+            <input type="file" class="form-control form-control-sm" name="resumenvta_json" accept=".json,application/json">
+            <div class="form-text">Resumen de ventas (nuevo formato): Cliente, Grupo 1..4, Porcentaje, Mes/Año. Sustituye al estado.json anterior.</div>
           </div>
           <hr class="my-2">
           <div class="mb-2">
