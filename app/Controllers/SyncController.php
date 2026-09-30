@@ -97,6 +97,13 @@ class SyncController
             'migracion'   => 'migracion.zip',
         ];
 
+        // El ZIP de migración solo se ofrece a clínicas con el módulo SISMED.
+        // Si el flag está apagado se omite aunque el archivo esté en la carpeta
+        // (quedaría de una corrida anterior): la nube lo rechazaría igual.
+        if (!$this->usaSismed($empresa)) {
+            unset($candidatos['migracion']);
+        }
+
         $presentes = [];
         foreach ($candidatos as $campo => $archivo) {
             if (is_file($carpeta . $archivo)) {
@@ -207,6 +214,9 @@ class SyncController
         // Al colocar uno nuevo se borra el anterior (un solo migracion.zip
         // vigente en la carpeta de la clínica).
         if (!empty($_FILES['migracion_zip']['name']) && ($_FILES['migracion_zip']['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK) {
+            if (!$this->usaSismed($empresa)) {
+                return ['ok' => false, 'message' => 'Esta clínica no tiene el módulo SISMED habilitado (empresas.modulo_control_parametros). Contacta al administrador de la plataforma.'];
+            }
             $contenido = (string)@file_get_contents($_FILES['migracion_zip']['tmp_name']);
             if (strncmp($contenido, 'PK', 2) !== 0) {
                 $fallos[] = 'migracion.zip no es un ZIP válido.';
@@ -322,6 +332,15 @@ class SyncController
             . '/archivos/control_parametros/';
     }
 
+    // ¿La clínica tiene el módulo SISMED habilitado? Espejo local del flag de
+    // la nube (simacweb.app companies.modulo_control_parametros), sembrado por
+    // la migración database/migrations/2026-09-30_modulo_control_parametros.sql.
+    // Solo controla la UI local: la nube revalida en apiSyncRecibir().
+    private function usaSismed(?array $empresa): bool
+    {
+        return ($empresa['modulo_control_parametros'] ?? 'estandar') === 'sismed';
+    }
+
     // Baja un paquete JSON desde SIMAC cloud.
     public function bajar()
     {
@@ -417,6 +436,7 @@ class SyncController
         $GLOBALS['_sidebar_current'] = 'sync';
         $GLOBALS['_sync_stub']    = $this->client->stub();
         $GLOBALS['_sync_empresa'] = $empresa['nombre'] ?? '';
+        $GLOBALS['_sync_usa_sismed'] = $this->usaSismed($empresa);
         require APP_PATH . '/views/sync/index.php';
     }
 

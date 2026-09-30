@@ -82,12 +82,14 @@ function mostrarArchivosSync($lista) {
             <input type="file" class="form-control form-control-sm" name="resumenvta_json" accept=".json,application/json">
             <div class="form-text">Resumen de ventas (nuevo formato): Cliente, Grupo 1..4, Porcentaje, Mes/Año. Sustituye al estado.json anterior.</div>
           </div>
+          <?php if (!empty($GLOBALS['_sync_usa_sismed'])): ?>
           <hr class="my-2">
           <div class="mb-2">
             <label class="form-label small mb-1"><strong>migracion.zip</strong> <span class="text-muted">(migración SISMED — ZIP con los JSON completos; opcional)</span></label>
             <input type="file" class="form-control form-control-sm" name="migracion_zip" accept=".zip,application/zip">
             <div class="form-text">Se reemplaza el ZIP anterior al subir uno nuevo. En la nube se descomprime y queda pendiente de la carga a PostgreSQL.</div>
           </div>
+          <?php endif; ?>
           <button type="submit" class="btn btn-success w-100"><i class="fa fa-upload me-2"></i>Colocar y sincronizar</button>
         </form>
       </div>
