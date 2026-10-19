@@ -62,7 +62,27 @@ foreach ($lotesLocales as $l) {
                       <span class="badge bg-danger">Incompleto</span>
                     <?php endif; ?>
                   </td>
-                  <td><span class="badge bg-info text-dark"><i class="fa fa-check me-1"></i>Descargado</span></td>
+                  <td>
+                    <?php
+                    $en = (string)($l['estado_nube'] ?? '');
+                    $mapEn = [
+                        'enviado_local'  => ['Enviado', 'bg-warning text-dark'],
+                        'recibido_local' => ['Recibido', 'bg-info text-dark'],
+                        'procesado'      => ['Procesado', 'bg-secondary'],
+                        'anulado'        => ['Anulado', 'bg-danger'],
+                        'error'          => ['Error', 'bg-danger'],
+                    ];
+                    if ($en !== '' && isset($mapEn[$en])): ?>
+                      <span class="badge <?= $mapEn[$en][1] ?>"><i class="fa fa-cloud me-1"></i><?= $mapEn[$en][0] ?></span>
+                    <?php elseif ($en !== ''): ?>
+                      <span class="badge bg-light text-dark border"><?= htmlspecialchars($en) ?></span>
+                    <?php else: ?>
+                      <span class="badge bg-light text-dark border">—</span>
+                    <?php endif; ?>
+                    <?php if (!empty($l['formato'])): ?>
+                      <span class="badge bg-light text-dark border" title="Versión del manifiesto">v<?= htmlspecialchars((string)$l['formato']) ?></span>
+                    <?php endif; ?>
+                  </td>
                   <td>
                     <?php
                     $est = (string)($l['estado'] ?? 'descargado');
@@ -174,9 +194,11 @@ foreach ($lotesLocales as $l) {
           Es solo consulta: el contenido real se ve con <strong>Ver</strong> en la lista de arriba.
         </p>
 <pre class="mb-0 p-3 rounded">&lt;codigo_lote&gt;/
-├── consolidado_&lt;codigo_lote&gt;.json   <span class="cmt">// datos completos de cada admisión</span>
-├── manifiesto_&lt;codigo_lote&gt;.json    <span class="cmt">// índice del lote</span>
+├── consolidado_&lt;codigo_lote&gt;.json   <span class="cmt">// datos completos de cada admisión (compat.)</span>
+├── manifiesto_&lt;codigo_lote&gt;.json    <span class="cmt">// índice del lote (v2: hash por admisión)</span>
 ├── admision_&lt;id&gt;/                   <span class="cmt">// id = clave interna BD (no es el #)</span>
+│   ├── datos.json                   <span class="cmt">// datos canónicos (verificados por hash)</span>
+│   ├── datos.local.json             <span class="cmt">// rutas locales (no viaja a la nube)</span>
 │   ├── adjunto1.pdf                 <span class="cmt">// PDFs, imágenes, etc.</span>
 │   └── adjunto2.jpg
 └── admision_&lt;id2&gt;/
@@ -253,6 +275,26 @@ foreach ($lotesLocales as $l) {
         </p>
       </div>
       <div class="modal-footer border-0">
+        <button type="button" class="btn btn-secondary btn-sm rounded-pill" data-bs-dismiss="modal"><i class="fa fa-times me-1"></i>Cerrar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: visor de JSON -->
+<div class="modal fade" id="modalVerJson" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fa fa-code me-2"></i><span id="verJsonTitulo">JSON</span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <div id="verJsonAviso"></div>
+        <pre id="verJsonContenido" class="p-3 rounded mb-0" style="background:#1e3a5f;color:#fff;max-height:65vh;overflow:auto;font-size:.78rem;line-height:1.4;"></pre>
+      </div>
+      <div class="modal-footer border-0">
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="btnCopiarJson"><i class="fa fa-copy me-1"></i>Copiar</button>
         <button type="button" class="btn btn-secondary btn-sm rounded-pill" data-bs-dismiss="modal"><i class="fa fa-times me-1"></i>Cerrar</button>
       </div>
     </div>
@@ -390,10 +432,12 @@ foreach ($lotesLocales as $l) {
               + '<span class="text-muted small float-end">' + esc(f.mtime) + '</span>'
               + pintarItemRuta(f) + '</a>';
           } else {
+            var esJson = (f.nombre.split('.').pop() || '').toLowerCase() === 'json';
             h += '<div class="list-group-item d-flex flex-column py-1">'
               + '<div class="d-flex align-items-center">'
               + icono(f) + '<span class="flex-grow-1">' + esc(f.nombre) + '</span>'
               + '<span class="text-muted small me-3">' + fmtTam(f.tam) + '</span>'
+              + (esJson ? '<button type="button" class="btn btn-sm btn-outline-success py-0 px-2 me-1 btn-ver-json" data-archivo="' + esc(f.ruta) + '" title="Ver JSON formateado"><i class="fa fa-code"></i></button>' : '')
               + '<a class="btn btn-sm btn-outline-primary py-0 px-2" href="' + esc(urlArchivo(f.ruta)) + '" target="_blank" rel="noopener" title="Abrir en pestaña"><i class="fa fa-external-link"></i></a>'
               + '</div>'
               + pintarItemRuta(f)
@@ -422,7 +466,82 @@ foreach ($lotesLocales as $l) {
     modalEl.style.display = 'block';
   }
 
+  function verJson(archivo) {
+    var titulo = document.getElementById('verJsonTitulo');
+    var aviso = document.getElementById('verJsonAviso');
+    var cont = document.getElementById('verJsonContenido');
+    titulo.textContent = _codigo + ' / ' + archivo;
+    aviso.innerHTML = '';
+    cont.textContent = 'Cargando…';
+    var modalEl = document.getElementById('modalVerJson');
+    try {
+      if (window.bootstrap && bootstrap.Modal) {
+        bootstrap.Modal.getOrCreateInstance(modalEl).show();
+      } else if (window.jQuery && jQuery.fn.modal) {
+        jQuery(modalEl).modal('show');
+      } else {
+        modalEl.classList.add('show');
+        modalEl.style.display = 'block';
+      }
+    } catch (e) {}
+
+    fetch('index.php?page=lotes_egresos_json&codigo=' + encodeURIComponent(_codigo)
+      + '&archivo=' + encodeURIComponent(archivo))
+      .then(function (r) { return r.json(); })
+      .then(function (res) {
+        if (!res || !res.ok) {
+          cont.textContent = '';
+          aviso.innerHTML = '<div class="alert alert-warning py-2 mb-2">'
+            + esc((res && res.msg) || 'No se pudo leer el archivo.') + '</div>';
+          return;
+        }
+        if (!res.es_json) {
+          aviso.innerHTML = '<div class="alert alert-warning py-2 mb-2">El archivo no es JSON válido; se muestra tal cual.</div>';
+        }
+        cont.textContent = res.contenido;
+      })
+      .catch(function () {
+        cont.textContent = '';
+        aviso.innerHTML = '<div class="alert alert-danger py-2 mb-2">Error de conexión.</div>';
+      });
+  }
+
   document.addEventListener('click', function (e) {
+    var verJsonBtn = e.target.closest('.btn-ver-json');
+    if (verJsonBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      verJson(verJsonBtn.getAttribute('data-archivo') || '');
+      return;
+    }
+    var copiarJson = e.target.closest('#btnCopiarJson');
+    if (copiarJson) {
+      e.preventDefault();
+      var pre = document.getElementById('verJsonContenido');
+      if (pre) {
+        var txt = pre.textContent || '';
+        var ok = false;
+        try {
+          var ta = document.createElement('textarea');
+          ta.value = txt;
+          document.body.appendChild(ta);
+          ta.select();
+          ok = document.execCommand('copy');
+          document.body.removeChild(ta);
+        } catch (err) { ok = false; }
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(txt).catch(function () {});
+          ok = true;
+        }
+        if (ok) {
+          copiarJson.innerHTML = '<i class="fa fa-check me-1"></i>Copiado';
+          setTimeout(function () {
+            copiarJson.innerHTML = '<i class="fa fa-copy me-1"></i>Copiar';
+          }, 1500);
+        }
+      }
+      return;
+    }
     var fila = e.target.closest('.lote-fila, .btn-ver-lote');
     if (fila) {
       var cod = fila.getAttribute('data-codigo');

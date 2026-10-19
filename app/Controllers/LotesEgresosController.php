@@ -230,6 +230,59 @@ class LotesEgresosController
     }
 
     /**
+     * AJAX: devuelve el contenido de un JSON del lote (manifiesto, consolidado,
+     * admision_<id>/datos.json, datos.local.json) formateado para el visor.
+     * GET codigo=<lote>&archivo=<ruta relativa .json>
+     */
+    public function verJson(): void
+    {
+        header('Content-Type: application/json');
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
+
+        $codigo = trim((string)($_GET['codigo'] ?? ''));
+        $archivo = trim((string)($_GET['archivo'] ?? ''));
+
+        if ($codigo === '' || !preg_match('/^[A-Za-z0-9_\-]+$/', $codigo)) {
+            echo json_encode(['ok' => false, 'msg' => 'Código de lote inválido.']);
+            return;
+        }
+        $archivo = str_replace('\\', '/', $archivo);
+        if ($archivo === '' || substr($archivo, -5) !== '.json'
+            || strpos($archivo, '..') !== false || $archivo[0] === '/'
+            || !preg_match('#^[A-Za-z0-9_\-./ ]+$#', $archivo)) {
+            echo json_encode(['ok' => false, 'msg' => 'Archivo no permitido.']);
+            return;
+        }
+
+        $dirLote = rtrim($this->carpetaLotes(), '/\\') . '/' . $codigo . '/';
+        $realBase = realpath($dirLote);
+        $realFile = realpath(rtrim($dirLote, '/\\') . '/' . ltrim($archivo, '/'));
+        if ($realBase === false || $realFile === false
+            || strpos($realFile, $realBase) !== 0 || !is_file($realFile)) {
+            echo json_encode(['ok' => false, 'msg' => 'No existe el archivo en el lote.']);
+            return;
+        }
+
+        $raw = (string)@file_get_contents($realFile);
+        $decoded = json_decode($raw, true);
+        if (json_last_error() === JSON_ERROR_NONE) {
+            $pretty = json_encode($decoded, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        } else {
+            $pretty = $raw;
+        }
+
+        echo json_encode([
+            'ok'        => true,
+            'codigo'    => $codigo,
+            'archivo'   => $archivo,
+            'es_json'   => json_last_error() === JSON_ERROR_NONE,
+            'contenido' => $pretty,
+        ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+
+    /**
      * Descarga un lote completo: JSONs raíz + adjuntos por admisión + confirmación.
      * Idempotente: si el archivo ya existe no lo vuelve a bajar.
      */
@@ -264,26 +317,77 @@ class LotesEgresosController
         @file_put_contents($dirLote . 'consolidado_' . $codigo . '.json', json_encode($payload, $flags));
         @file_put_contents($dirLote . 'manifiesto_' . $codigo . '.json', json_encode($manifiesto, $flags));
 
+        $formato = (string)($manifiesto['formato_version'] ?? '1.0');
+        $manifestHash = hash('sha256', json_encode($manifiesto, JSON_UNESCAPED_UNICODE));
+        $admisiones = is_array($manifiesto['admisiones'] ?? null) ? $manifiesto['admisiones'] : [];
+
+        // Índice del payload consolidado por id (respaldo del formato 2.0 / legacy).
+        $jsonPorId = [];
+        foreach ((array)($payload['admisiones'] ?? []) as $j) {
+            $jid = (int)($j['id'] ?? 0);
+            if ($jid > 0) {
+                $jsonPorId[$jid] = $j;
+            }
+        }
+
         $docsOk = 0;
         $docsErr = 0;
         $docsYa = 0;
-        $totalDocs = 0;
-        $admisiones = $manifiesto['admisiones'] ?? [];
+        $datosOk = 0;
+        $datosErr = 0;
+        $totalAdm = 0;
+        $docsPorAdm = [];
+
         foreach ($admisiones as $adm) {
             $admId = (int)($adm['id'] ?? 0);
             if ($admId <= 0) {
                 continue;
             }
-            $docs = is_array($adm['documentos'] ?? null) ? $adm['documentos'] : [];
-            if (empty($docs)) {
-                continue;
-            }
+            $totalAdm++;
             $dirAdm = $dirLote . 'admision_' . $admId . '/';
             if (!is_dir($dirAdm)) {
                 @mkdir($dirAdm, 0775, true);
             }
+
+            // 1) datos.json canónico (formato 2.0 vía endpoint; respaldo del payload).
+            $json = null;
+            $hashEsperado = trim((string)($adm['hash'] ?? ''));
+            if ($formato === '2.0') {
+                $resAdm = $this->client->get('/index.php', [
+                    'page'        => 'egreso_lote_admision',
+                    'codigo_lote' => $codigo,
+                    'admision_id' => $admId,
+                ]);
+                $dAdm = is_array($resAdm['data'] ?? null) ? $resAdm['data'] : [];
+                if (!empty($resAdm['ok']) && !empty($dAdm['ok']) && is_array($dAdm['json'] ?? null)) {
+                    $json = $dAdm['json'];
+                    if ($hashEsperado === '' && !empty($dAdm['hash'])) {
+                        $hashEsperado = (string)$dAdm['hash'];
+                    }
+                }
+            }
+            if (!is_array($json) && isset($jsonPorId[$admId])) {
+                $json = $jsonPorId[$admId];
+            }
+            if (!is_array($json)) {
+                $datosErr++;
+                continue;
+            }
+            if ($hashEsperado !== '') {
+                $calc = hash('sha256', json_encode($json, JSON_UNESCAPED_UNICODE));
+                if (!hash_equals($hashEsperado, $calc)) {
+                    $this->syncLog->registrar('lotes_egresos', 'descarga', 'error', 0,
+                        "Lote $codigo admisión $admId: hash de datos.json no coincide.");
+                    $datosErr++;
+                    continue;
+                }
+            }
+            @file_put_contents($dirAdm . 'datos.json', json_encode($json, $flags));
+            $datosOk++;
+
+            // 2) Adjuntos de esta admisión.
+            $docs = is_array($adm['documentos'] ?? null) ? $adm['documentos'] : [];
             foreach ($docs as $doc) {
-                $totalDocs++;
                 $url = trim((string)($doc['url'] ?? ''));
                 $nombre = $this->nombreSeguro((string)($doc['nombre'] ?? ''));
                 if ($url === '' || $nombre === '') {
@@ -294,27 +398,58 @@ class LotesEgresosController
                 if (is_file($destino) && filesize($destino) > 0) {
                     $docsOk++;
                     $docsYa++;
+                    $docsPorAdm[$admId][] = $nombre;
                     continue;
                 }
                 if ($this->descargarArchivo($url, $destino)) {
                     $docsOk++;
+                    $docsPorAdm[$admId][] = $nombre;
                 } else {
                     $docsErr++;
                 }
             }
         }
 
-        $nAdm = is_array($admisiones) ? count($admisiones) : 0;
+        // 3) datos.local.json: rutas locales y documentos. NO se mete en datos.json
+        //    (que debe conservar su hash).
+        $companyCode = trim((string)($this->empresa->obtenerUnica()['company_code'] ?? ''));
+        foreach ($admisiones as $adm) {
+            $admId = (int)($adm['id'] ?? 0);
+            if ($admId <= 0) {
+                continue;
+            }
+            $dirAdm = $dirLote . 'admision_' . $admId . '/';
+            $local = [
+                'id'              => $admId,
+                'correlativo'     => $adm['correlativo'] ?? null,
+                'paciente_nombre' => $adm['paciente_nombre'] ?? null,
+                'ruta_local'      => $dirAdm,
+                'ruta_relativa'   => 'public/uploads/empresas/' . $companyCode
+                    . '/archivos/lotes_egresos/' . $codigo . '/admision_' . $admId . '/',
+                'documentos'      => array_map(function ($n) use ($dirAdm) {
+                    return ['nombre' => $n, 'ruta_local' => $dirAdm . $n];
+                }, $docsPorAdm[$admId] ?? []),
+            ];
+            @file_put_contents($dirAdm . 'datos.local.json', json_encode($local, $flags));
+        }
+
+        $totalDocs = 0;
+        foreach ($docsPorAdm as $nombres) {
+            $totalDocs += count($nombres);
+        }
+        $nAdm = $totalAdm;
         $prefijo = $yaExistia ? 'Re-descarga de lote local' : 'Lote nuevo';
         $reusa = $docsYa > 0 ? " ($docsYa archivo(s) ya existían, no se repitieron)" : '';
-        $resumen = "$prefijo $codigo: $nAdm admisiones, $docsOk/$totalDocs archivos$reusa";
+        $resumen = "$prefijo $codigo: $datosOk/$totalAdm datos.json, $docsOk archivos$reusa";
 
-        // Solo confirmar si bajó todo: así "pendientes" permite reintentar docs faltantes.
-        if ($docsErr > 0) {
-            $this->syncLog->registrar('lotes_egresos', 'descarga', 'error', $docsOk, "$resumen ($docsErr con error, sin confirmar)");
+        // Solo confirmar si bajó todo (datos.json + documentos): así "pendientes"
+        // permite reintentar lo que faltó.
+        if ($datosErr > 0 || $docsErr > 0) {
+            $this->syncLog->registrar('lotes_egresos', 'descarga', 'error', $docsOk,
+                "$resumen (datos err=$datosErr, docs err=$docsErr, sin confirmar)");
             return [
                 'ok' => false,
-                'message' => "$resumen — $docsErr fallaron. No se confirmó; reintenta.",
+                'message' => "$resumen — $datosErr dato(s) y $docsErr archivo(s) fallaron. No se confirmó; reintenta.",
             ];
         }
 
@@ -341,6 +476,9 @@ class LotesEgresosController
                 'total_admisiones' => (int)($man['total_admisiones'] ?? $nAdm),
                 'total_documentos' => (int)($man['total_documentos'] ?? $totalDocs),
                 'docs_ok' => $docsOk,
+                'estado_nube' => 'recibido_local',
+                'formato' => $formato,
+                'manifest_hash' => $manifestHash,
                 'metadata' => [
                     'confirmado_nube' => true,
                     'ya_existia' => $yaExistia,
@@ -359,6 +497,14 @@ class LotesEgresosController
                     'documentos' => $docsOk,
                     'ruta_local' => rtrim($dirLote, '/\\') . DIRECTORY_SEPARATOR,
                 ]);
+                try {
+                    $this->pdo->prepare(
+                        'UPDATE lotes_locales SET notificado_en = :n
+                         WHERE company_code = :c AND codigo = :k'
+                    )->execute(['n' => date('Y-m-d H:i:s'), 'c' => $companyCode, 'k' => $codigo]);
+                } catch (\Throwable $e2) {
+                    // La marca de notificación es best-effort.
+                }
             } catch (\Throwable $e) {
                 $this->syncLog->registrar('lotes_egresos', 'notify', 'error', 0,
                     "Email lote nuevo falló: " . $e->getMessage());
@@ -410,28 +556,36 @@ class LotesEgresosController
             if (!is_dir($dir)) {
                 continue;
             }
+            $info = $this->infoLote($nombre);
             $item = [
                 'codigo' => $nombre,
                 'fecha' => date('Y-m-d H:i', @filemtime($dir) ?: time()),
                 'orden_fecha' => @filemtime($dir) ?: 0,
                 'ruta_local' => rtrim($dir, '/\\') . DIRECTORY_SEPARATOR,
                 'estado' => 'descargado',
+                'estado_nube' => $info['estado_nube'] ?? null,
+                'formato' => $info['formato'] ?? '1.0',
+                'procesado_nube_en' => $info['procesado_nube_en'] ?? null,
                 'total_admisiones' => null,
                 'total_documentos' => null,
                 'admisiones' => [],
                 'docs_totales' => 0,
-                'json_ok' => is_file($dir . '/consolidado_' . $nombre . '.json')
-                    && is_file($dir . '/manifiesto_' . $nombre . '.json'),
+                'datos_ok' => 0,
+                'json_ok' => false,
             ];
             $item['estado'] = $this->estadoLote($nombre) ?: 'descargado';
 
             $manPath = $dir . '/manifiesto_' . $nombre . '.json';
+            $mapaAdm = [];
+            $manOk = false;
             if (is_file($manPath)) {
                 $man = json_decode((string)@file_get_contents($manPath), true);
                 if (is_array($man)) {
+                    $manOk = true;
                     $item['total_admisiones'] = (int)($man['total_admisiones'] ?? 0);
                     $item['total_documentos'] = (int)($man['total_documentos'] ?? 0);
                     $item['empresa'] = (string)($man['empresa']['nombre'] ?? '');
+                    $item['formato'] = (string)($man['formato_version'] ?? ($item['formato'] ?: '1.0'));
                     // Fecha real del envío (más confiable que mtime de la carpeta)
                     $fh = (string)($man['fecha_hora'] ?? '');
                     if ($fh !== '') {
@@ -442,7 +596,6 @@ class LotesEgresosController
                         }
                     }
                     // Mapa id → correlativo/paciente para las carpetas admision_*
-                    $mapaAdm = [];
                     foreach (($man['admisiones'] ?? []) as $mAdm) {
                         $mid = (int)($mAdm['id'] ?? 0);
                         if ($mid > 0) {
@@ -452,48 +605,49 @@ class LotesEgresosController
                             ];
                         }
                     }
-                    foreach (scandir($dir) ?: [] as $sub) {
-                        if (strpos($sub, 'admision_') !== 0 || !is_dir($dir . '/' . $sub)) {
-                            continue;
-                        }
-                        $docs = array_diff(scandir($dir . '/' . $sub) ?: [], ['.', '..']);
-                        $nDocs = count($docs);
-                        $item['docs_totales'] += $nDocs;
-                        $aid = 0;
-                        if (preg_match('/^admision_(\d+)$/', $sub, $mm)) {
-                            $aid = (int)$mm[1];
-                        }
-                        $item['admisiones'][] = [
-                            'carpeta' => $sub,
-                            'docs' => $nDocs,
-                            'admision_id' => $aid,
-                            'correlativo' => $mapaAdm[$aid]['correlativo'] ?? null,
-                            'paciente_nombre' => $mapaAdm[$aid]['paciente_nombre'] ?? null,
-                        ];
-                    }
                 }
             }
-            if (empty($item['admisiones'])) {
-                foreach (scandir($dir) ?: [] as $sub) {
-                    if (strpos($sub, 'admision_') !== 0 || !is_dir($dir . '/' . $sub)) {
+            foreach (scandir($dir) ?: [] as $sub) {
+                if (strpos($sub, 'admision_') !== 0 || !is_dir($dir . '/' . $sub)) {
+                    continue;
+                }
+                $archivos = array_diff(scandir($dir . '/' . $sub) ?: [], ['.', '..']);
+                $docs = [];
+                $tieneDatos = false;
+                foreach ($archivos as $f) {
+                    if ($f === 'datos.json' || $f === 'datos.local.json') {
+                        if ($f === 'datos.json') {
+                            $tieneDatos = true;
+                        }
                         continue;
                     }
-                    $docs = array_diff(scandir($dir . '/' . $sub) ?: [], ['.', '..']);
-                    $nDocs = count($docs);
-                    $item['docs_totales'] += $nDocs;
-                    $aid = 0;
-                    if (preg_match('/^admision_(\d+)$/', $sub, $mm)) {
-                        $aid = (int)$mm[1];
-                    }
-                    $item['admisiones'][] = [
-                        'carpeta' => $sub,
-                        'docs' => $nDocs,
-                        'admision_id' => $aid,
-                        'correlativo' => null,
-                        'paciente_nombre' => null,
-                    ];
+                    $docs[] = $f;
                 }
+                $nDocs = count($docs);
+                $item['docs_totales'] += $nDocs;
+                if ($tieneDatos) {
+                    $item['datos_ok']++;
+                }
+                $aid = 0;
+                if (preg_match('/^admision_(\d+)$/', $sub, $mm)) {
+                    $aid = (int)$mm[1];
+                }
+                $item['admisiones'][] = [
+                    'carpeta' => $sub,
+                    'docs' => $nDocs,
+                    'datos_json' => $tieneDatos,
+                    'admision_id' => $aid,
+                    'correlativo' => $mapaAdm[$aid]['correlativo'] ?? null,
+                    'paciente_nombre' => $mapaAdm[$aid]['paciente_nombre'] ?? null,
+                ];
             }
+            // json_ok: manifiesto + consolidado (compat) y, en formato 2.0, un
+            // datos.json por cada admisión del manifiesto.
+            $item['json_ok'] = $manOk
+                && is_file($dir . '/consolidado_' . $nombre . '.json')
+                && ($item['formato'] !== '2.0'
+                    || $item['total_admisiones'] === 0
+                    || $item['datos_ok'] >= $item['total_admisiones']);
             $out[] = $item;
         }
         // Más reciente primero (fecha del manifiesto / carpeta)
@@ -545,6 +699,23 @@ class LotesEgresosController
             return $row ? (string)$row['estado'] : '';
         } catch (\Throwable $e) {
             return '';
+        }
+    }
+
+    /** Columnas nuevas de seguimiento (estado_nube, formato, procesado_nube_en). */
+    private function infoLote(string $codigo): array
+    {
+        try {
+            $companyCode = trim((string)($this->empresa->obtenerUnica()['company_code'] ?? ''));
+            $stmt = $this->pdo->prepare(
+                'SELECT estado_nube, formato, procesado_nube_en
+                 FROM lotes_locales WHERE company_code = :c AND codigo = :k LIMIT 1'
+            );
+            $stmt->execute(['c' => $companyCode, 'k' => $codigo]);
+            $row = $stmt->fetch();
+            return $row ?: [];
+        } catch (\Throwable $e) {
+            return [];
         }
     }
 

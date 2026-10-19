@@ -149,6 +149,11 @@ switch ($page) {
         $controller->explorar();
         break;
 
+    case 'lotes_egresos_json':
+        $controller = new LotesEgresosController();
+        $controller->verJson();
+        break;
+
     case 'api_v1':
         // Fallback si no hay rewrite: index.php?page=api_v1&path=lotes
         (new ApiController())->handle(

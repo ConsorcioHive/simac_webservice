@@ -167,7 +167,8 @@ class ApiController
         }
 
         $sql = 'SELECT codigo, estado, ruta_local, total_admisiones, total_documentos,
-                       descargado_en, disponible_en, consumido_en, updated_at
+                       descargado_en, disponible_en, consumido_en, updated_at,
+                       estado_nube, formato, procesado_nube_en, notificado_en
                 FROM lotes_locales WHERE company_code = :c';
         $params = ['c' => $codigoEmpresa];
         if ($estado !== '') {
@@ -359,12 +360,26 @@ class ApiController
         }
 
         $now = date('Y-m-d H:i:s');
-        $stmt = $this->pdo->prepare(
-            "UPDATE lotes_locales
-             SET estado = 'consumido', consumido_en = :n, updated_at = :n
-             WHERE company_code = :c AND codigo = :k"
-        );
-        $stmt->execute(['n' => $now, 'c' => $codigoEmpresa, 'k' => $codigo]);
+        try {
+            $stmt = $this->pdo->prepare(
+                "UPDATE lotes_locales
+                 SET estado = 'consumido', consumido_en = :n, updated_at = :n,
+                     estado_nube = 'procesado'
+                 WHERE company_code = :c AND codigo = :k"
+            );
+            $stmt->execute(['n' => $now, 'c' => $codigoEmpresa, 'k' => $codigo]);
+        } catch (\PDOException $ex) {
+            $stmt = $this->pdo->prepare(
+                "UPDATE lotes_locales
+                 SET estado = 'consumido', consumido_en = :n, updated_at = :n
+                 WHERE company_code = :c AND codigo = :k"
+            );
+            $stmt->execute(['n' => $now, 'c' => $codigoEmpresa, 'k' => $codigo]);
+        }
+
+        // Callback a la nube: el ERP ya procesó el lote. Best-effort: si falla,
+        // el lote queda 'consumido' local y se puede reintentar.
+        $procesadoNube = $this->notificarProcesadoNube($codigo);
 
         Json::response([
             'ok' => true,
@@ -372,8 +387,41 @@ class ApiController
                 'codigo' => $codigo,
                 'estado' => 'consumido',
                 'consumido_en' => $now,
+                'procesado_nube' => $procesadoNube,
             ],
         ]);
+    }
+
+    /**
+     * Avisa a la nube (egreso_lote_procesado) que el ERP consumió el lote.
+     * Devuelve true si la nube confirmó.
+     */
+    private function notificarProcesadoNube(string $codigo): bool
+    {
+        $codigoEmpresa = $this->companyCode();
+        try {
+            $e = $this->empresa->obtenerUnica();
+            $client = new \App\Services\SimacCloudClient(
+                $e['simac_cloud_url'] ?? null,
+                $e['simac_api_token'] ?? null
+            );
+            $res = $client->post('/index.php?page=egreso_lote_procesado', ['codigo_lote' => $codigo]);
+            $data = is_array($res['data'] ?? null) ? $res['data'] : [];
+            if (!empty($res['ok']) && !empty($data['ok'])) {
+                try {
+                    $this->pdo->prepare(
+                        "UPDATE lotes_locales SET procesado_nube_en = :n
+                         WHERE company_code = :c AND codigo = :k"
+                    )->execute(['n' => date('Y-m-d H:i:s'), 'c' => $codigoEmpresa, 'k' => $codigo]);
+                } catch (\Throwable $e2) {
+                    // best-effort
+                }
+                return true;
+            }
+        } catch (\Throwable $e) {
+            // sin conexión / token: se reintenta en la próxima llamada
+        }
+        return false;
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────
@@ -441,7 +489,63 @@ class ApiController
         $meta = json_encode($extra['metadata'] ?? null, JSON_UNESCAPED_UNICODE);
 
         if ($estado === 'disponible') {
+            // Columnas de seguimiento del flujo v2 (migración 2026-10-19_01).
+            // Si no existen todavía, se reintenta con el INSERT legacy.
             $sql = "INSERT INTO lotes_locales
+                (company_code, codigo, estado, ruta_local, total_admisiones, total_documentos, docs_ok,
+                 metadata, estado_nube, formato, manifest_hash,
+                 descargado_en, disponible_en, cloud_confirmado_en, updated_at)
+                VALUES (:c, :k, :e, :r, :ta, :td, :dok, :m, :en, :fm, :mh, :n, :n, :n, :n)
+                ON DUPLICATE KEY UPDATE
+                    estado = IF(estado = 'consumido', 'consumido', VALUES(estado)),
+                    ruta_local = VALUES(ruta_local),
+                    total_admisiones = VALUES(total_admisiones),
+                    total_documentos = VALUES(total_documentos),
+                    docs_ok = VALUES(docs_ok),
+                    metadata = VALUES(metadata),
+                    estado_nube = VALUES(estado_nube),
+                    formato = VALUES(formato),
+                    manifest_hash = VALUES(manifest_hash),
+                    descargado_en = COALESCE(descargado_en, VALUES(descargado_en)),
+                    disponible_en = IF(estado = 'consumido', disponible_en, VALUES(disponible_en)),
+                    cloud_confirmado_en = VALUES(cloud_confirmado_en),
+                    updated_at = VALUES(updated_at)";
+        } else {
+            $sql = "INSERT INTO lotes_locales
+                (company_code, codigo, estado, ruta_local, updated_at)
+                VALUES (:c, :k, :e, :r, :n)
+                ON DUPLICATE KEY UPDATE
+                    estado = VALUES(estado),
+                    ruta_local = VALUES(ruta_local),
+                    updated_at = VALUES(updated_at)";
+            $extra = [];
+        }
+
+        $params = [
+            'c' => $codigoEmpresa,
+            'k' => $codigo,
+            'e' => $estado,
+            'r' => $rutaLocal,
+            'n' => $now,
+        ];
+        if ($estado === 'disponible') {
+            $params['ta'] = (int)($extra['total_admisiones'] ?? 0);
+            $params['td'] = (int)($extra['total_documentos'] ?? 0);
+            $params['dok'] = (int)($extra['docs_ok'] ?? 0);
+            $params['m'] = $meta;
+            $params['en'] = (string)($extra['estado_nube'] ?? 'recibido_local');
+            $params['fm'] = (string)($extra['formato'] ?? '2.0');
+            $params['mh'] = isset($extra['manifest_hash']) ? (string)$extra['manifest_hash'] : null;
+        }
+
+        try {
+            $this->pdo->prepare($sql)->execute($params);
+        } catch (\PDOException $ex) {
+            if ($estado !== 'disponible') {
+                throw $ex;
+            }
+            // BD sin las columnas v2: degradar al INSERT legacy.
+            $legacy = "INSERT INTO lotes_locales
                 (company_code, codigo, estado, ruta_local, total_admisiones, total_documentos, docs_ok,
                  metadata, descargado_en, disponible_en, updated_at)
                 VALUES (:c, :k, :e, :r, :ta, :td, :dok, :m, :n, :n, :n)
@@ -455,32 +559,12 @@ class ApiController
                     descargado_en = COALESCE(descargado_en, VALUES(descargado_en)),
                     disponible_en = IF(estado = 'consumido', disponible_en, VALUES(disponible_en)),
                     updated_at = VALUES(updated_at)";
-        } else {
-            $sql = "INSERT INTO lotes_locales
-                (company_code, codigo, estado, ruta_local, updated_at)
-                VALUES (:c, :k, :e, :r, :n)
-                ON DUPLICATE KEY UPDATE
-                    estado = VALUES(estado),
-                    ruta_local = VALUES(ruta_local),
-                    updated_at = VALUES(updated_at)";
-            $extra = [];
+            $this->pdo->prepare($legacy)->execute([
+                'c' => $params['c'], 'k' => $params['k'], 'e' => $params['e'], 'r' => $params['r'],
+                'ta' => $params['ta'], 'td' => $params['td'], 'dok' => $params['dok'],
+                'm' => $params['m'], 'n' => $params['n'],
+            ]);
         }
-
-        $stmt = $this->pdo->prepare($sql);
-        $params = [
-            'c' => $codigoEmpresa,
-            'k' => $codigo,
-            'e' => $estado,
-            'r' => $rutaLocal,
-            'n' => $now,
-        ];
-        if ($estado === 'disponible') {
-            $params['ta'] = (int)($extra['total_admisiones'] ?? 0);
-            $params['td'] = (int)($extra['total_documentos'] ?? 0);
-            $params['dok'] = (int)($extra['docs_ok'] ?? 0);
-            $params['m'] = $meta;
-        }
-        $stmt->execute($params);
     }
 
     private function jsonError(int $code, string $msg): void

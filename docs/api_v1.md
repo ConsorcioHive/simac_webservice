@@ -176,6 +176,9 @@ curl -H "X-API-Key: TU_KEY" "http://192.168.0.10/simac_webservice/api/v1/lotes?e
 | `total_admisiones` | int\|null | Admisiones del manifiesto |
 | `total_documentos` | int\|null | Documentos del manifiesto |
 | `en_disco` | bool | (solo en algunos casos) si la carpeta existe |
+| `estado_nube` | string\|null | Estado en la nube: `enviado_local` \| `recibido_local` \| `procesado` \| `anulado` \| `error` |
+| `formato` | string | Versión del manifiesto (`2.0` = con `datos.json` por admisión) |
+| `procesado_nube_en` | string\|null | Cuándo la nube confirmó el callback de consumo |
 | `descargado_en` | string\|null | Cuándo se bajó de la nube |
 | `disponible_en` | string\|null | Cuándo pasó a `disponible` |
 | `consumido_en` | string\|null | Cuándo lo consumió el cliente |
@@ -289,11 +292,18 @@ Cada item incluye `ruta_local` **absoluta** para que el cliente recoja la data s
 
 ```
 <codigo_lote>/
-├── consolidado_<codigo>.json   ← payload completo de todas las admisiones
-├── manifiesto_<codigo>.json    ← índice: empresa, fechas, admisiones
+├── consolidado_<codigo>.json   ← payload completo (compatibilidad, formato 1.0 y 2.0)
+├── manifiesto_<codigo>.json    ← índice: empresa, fechas, admisiones (v2 añade hash por admisión)
 └── admision_<id>/
+    ├── datos.json              ← datos canónicos de la admisión (formato 2.0; hash verificable)
+    ├── datos.local.json        ← rutas locales + documentos (NO viaja a la nube)
     └── <adjunto...>.pdf|jpg|...
 ```
+
+> **Formato 2.0 (nuevo):** el manifiesto trae `formato_version: "2.0"` y, por admisión,
+> un `hash` (sha256 de `datos.json`). El cliente debe leer **`datos.json`** por admisión;
+> `consolidado_<codigo>.json` se mantiene solo para compatibilidad con clientes antiguos.
+> Los lotes `formato 1.0` (legacy) no tienen `datos.json`: usar el consolidado.
 
 ---
 
@@ -308,8 +318,12 @@ curl -X POST -H "X-API-Key: TU_KEY" -H "Content-Type: application/json" \
 
 **200 OK (primera vez):**
 ```json
-{ "ok": true, "data": { "codigo": "COD", "estado": "consumido", "consumido_en": "2026-09-24 19:00:00" } }
+{ "ok": true, "data": { "codigo": "COD", "estado": "consumido", "consumido_en": "2026-09-24 19:00:00", "procesado_nube": true } }
 ```
+
+> Tras consumir, el webservice avisa a la nube (`egreso_lote_procesado`) para que el lote
+> pase a **`procesado`**. Si esa llamada falla, `procesado_nube` viene `false` y el lote local
+> igual queda `consumido` (se reintenta el aviso en la próxima ejecución).
 
 **200 OK (repetido):**
 ```json
@@ -399,8 +413,10 @@ foreach ($lotes as $l) {
 2. `GET /lotes?estado=disponible` → obtener lotes pendientes.
 3. `GET /lotes/{codigo}` → leer manifiesto (admisiones, correlativos, pacientes).
 4. `GET /lotes/{codigo}/archivos` → obtener árbol y `ruta_local` de cada archivo.
-5. Procesar los archivos (leer desde `ruta_local` o copiarlos).
-6. `POST /lotes/{codigo}/consumir` → confirmar que ya no debe reenviarse.
+5. Procesar los archivos: en **formato 2.0** leer `admision_<id>/datos.json` (y verificar el
+   `hash` del manifiesto si se desea); en **1.0** leer `consolidado_<codigo>.json`.
+   `datos.local.json` solo trae rutas locales, no datos de negocio.
+6. `POST /lotes/{codigo}/consumir` → confirmar que ya no debe reenviarse (dispara el aviso a la nube).
 
 ---
 
@@ -510,3 +526,4 @@ curl -X POST -H "X-API-Key: TU_KEY" "http://192.168.0.10/simac_webservice/api/v1
 | `sync/traer_lotes_oculto.vbs` | Wrapper oculto para la tarea |
 | `database/migrations/2026-09-24_api_tokens.sql` | Tabla `api_tokens` |
 | `database/migrations/2026-09-24_lotes_locales.sql` | Tabla `lotes_locales` |
+| `database/migrations/2026-10-19_01_lotes_locales_v2.sql` | Columnas de seguimiento v2 (`estado_nube`, `formato`, `manifest_hash`, …) |

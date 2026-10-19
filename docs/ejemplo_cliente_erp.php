@@ -77,9 +77,11 @@ if (empty($lotes)) {
 // ── 3) Por cada lote: detalle → archivos → consumir ───────────────────────
 foreach ($lotes as $l) {
     $codigo = (string)$l['codigo'];
+    $formato = (string)($l['formato'] ?? '1.0');
     echo "── Lote: $codigo ──\n";
     echo '    Estado: ' . ($l['estado'] ?? '?') . ' | Admisiones: ' . ($l['total_admisiones'] ?? '?')
         . ' | Documentos: ' . ($l['total_documentos'] ?? '?') . "\n";
+    echo '    Formato: ' . $formato . ' | Estado nube: ' . ($l['estado_nube'] ?? '?') . "\n";
     echo '    Ruta local: ' . ($l['ruta_local'] ?? '?') . "\n";
 
     // 3a) Detalle (manifiesto)
@@ -110,6 +112,19 @@ foreach ($lotes as $l) {
         echo '    (archivos falló: ' . ($archivos['error'] ?? '?') . ")\n";
     }
 
+    // 3b-bis) Formato 2.0: datos.json por admisión (lo que procesa el negocio).
+    //         El manifiesto trae un `hash` (sha256 de datos.json) para verificar.
+    //         En formato 1.0 (legacy) NO hay datos.json: usar consolidado_<codigo>.json.
+    if ($formato === '2.0' && !empty($l['ruta_local'])) {
+        foreach (glob(rtrim((string)$l['ruta_local'], "/\\") . '/admision_*/datos.json') ?: [] as $f) {
+            $datos = json_decode((string)@file_get_contents($f), true);
+            if (is_array($datos)) {
+                echo '      [datos.json] ' . basename(dirname($f))
+                    . ' | total: ' . ($datos['total'] ?? ($datos['total_bs'] ?? '?')) . "\n";
+            }
+        }
+    }
+
     // 3c) Consumir (marcar como procesado)
     if ($DRY) {
         echo "    [dry-run] no se marca consumir\n";
@@ -118,8 +133,11 @@ foreach ($lotes as $l) {
         if (!empty($consumir['ok'])) {
             $d = $consumir['data'];
             $extra = !empty($d['ya_consumido']) ? ' (ya estaba consumido)' : '';
+            $nube = array_key_exists('procesado_nube', $d)
+                ? (!empty($d['procesado_nube']) ? ' | nube=procesado' : ' | nube=pendiente')
+                : '';
             echo '    Consumir → ' . ($d['estado'] ?? '?') . $extra
-                . ' | ' . ($d['consumido_en'] ?? '') . "\n";
+                . ' | ' . ($d['consumido_en'] ?? '') . $nube . "\n";
         } else {
             echo '    Consumir falló: ' . ($consumir['error'] ?? '?') . "\n";
         }
